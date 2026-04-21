@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Environment
+.env
+
+# Output
+output/*
+!output/.gitkeep
+
+# Agent files
+AGENT*.md
+braindump.md
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

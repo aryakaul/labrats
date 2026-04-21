@@ -1,0 +1,20 @@
+[project]
+name = "labrats"
+version = "0.1.0"
+description = "Personalized biorxiv preprint triage and ideation engine"
+requires-python = ">=3.11"
+dependencies = [
+	"requests",
+	"jinja2",
+	"litellm",
+	"pyyaml",
+	"typer",
+	"rich",
+]
+
+[project.scripts]
+labrats = "labrats.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

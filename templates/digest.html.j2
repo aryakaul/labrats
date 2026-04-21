@@ -1,0 +1,139 @@
+{# templates/digest.html.j2 #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>labrats digest</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+	font-family: system-ui, -apple-system, sans-serif;
+	background: #f8f8f8;
+	color: #1a1a1a;
+	line-height: 1.5;
+	max-width: 800px;
+	margin: 0 auto;
+	padding: 2rem 1rem;
+}
+h1 {
+	font-size: 1.4rem;
+	margin-bottom: 1.5rem;
+	border-bottom: 2px solid #1a1a1a;
+	padding-bottom: 0.5rem;
+}
+.card {
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 6px;
+	padding: 1.25rem;
+	margin-bottom: 1rem;
+}
+.card-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 1rem;
+	margin-bottom: 0.75rem;
+}
+.card-title {
+	font-size: 1.05rem;
+	font-weight: 600;
+}
+.card-title a {
+	color: #1a1a1a;
+	text-decoration: none;
+}
+.card-title a:hover { text-decoration: underline; }
+.card-meta {
+	font-size: 0.8rem;
+	color: #666;
+	margin-bottom: 0.75rem;
+}
+.badge {
+	font-size: 0.75rem;
+	font-weight: 600;
+	padding: 0.15rem 0.5rem;
+	border-radius: 3px;
+	white-space: nowrap;
+}
+.badge-interest {
+	background: #e8f5e9;
+	color: #2e7d32;
+}
+.badge-tension {
+	background: #fff3e0;
+	color: #e65100;
+}
+.personas {
+	display: grid;
+	gap: 0.75rem;
+	margin-top: 0.75rem;
+}
+.persona {
+	border-left: 3px solid #ccc;
+	padding-left: 0.75rem;
+}
+.persona-name {
+	font-size: 0.85rem;
+	font-weight: 600;
+	margin-bottom: 0.2rem;
+}
+.persona-scores {
+	font-size: 0.78rem;
+	color: #555;
+}
+.persona-summary {
+	font-size: 0.85rem;
+	margin-top: 0.2rem;
+}
+</style>
+</head>
+<body>
+<h1>labrats digest</h1>
+{% for card in cards %}
+<div class="card">
+	<div class="card-header">
+		<div class="card-title">
+			<a href="{{ card.paper.url }}">
+				{{ card.paper.title }}
+			</a>
+		</div>
+		<div>
+			<span class="badge badge-interest">
+				{{ "%.1f"|format(card.interestingness) }}
+			</span>
+			{% if card.tension > 1.0 %}
+			<span class="badge badge-tension">
+				tension {{ "%.1f"|format(card.tension) }}
+			</span>
+			{% endif %}
+		</div>
+	</div>
+	<div class="card-meta">
+		{{ card.paper.authors | join(", ") }}
+		&middot; {{ card.paper.category }}
+		&middot; {{ card.paper.date }}
+	</div>
+	<div class="personas">
+	{% for result in card.results %}
+		<div class="persona">
+			<div class="persona-name">
+				{{ result.persona_name }}
+			</div>
+			<div class="persona-scores">
+				{% for k, v in result.scores.items() %}
+				{{ k }}: {{ "%.0f"|format(v) }}
+				{% if not loop.last %}&middot;{% endif %}
+				{% endfor %}
+			</div>
+			<div class="persona-summary">
+				{{ result.summary }}
+			</div>
+		</div>
+	{% endfor %}
+	</div>
+</div>
+{% endfor %}
+</body>
+</html>
