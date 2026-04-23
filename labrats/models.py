@@ -30,6 +30,7 @@ class PersonaResult:
 	persona_name: str
 	scores: dict[str, float]
 	summary: str
+	model: str = ""
 
 
 @dataclass

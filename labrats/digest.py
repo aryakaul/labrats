@@ -6,7 +6,7 @@ from labrats.models import PaperCard
 
 
 def render_digest(
-	cards: list[PaperCard],
+	sections: list[tuple[str, list[PaperCard]]],
 	template_dir: Path,
 	output_dir: Path,
 ) -> Path:
@@ -15,7 +15,7 @@ def render_digest(
 		autoescape=True,
 	)
 	template = env.get_template("digest.html.j2")
-	html = template.render(cards=cards)
+	html = template.render(sections=sections)
 	output_dir.mkdir(parents=True, exist_ok=True)
 	out_path = output_dir / "digest.html"
 	out_path.write_text(html)

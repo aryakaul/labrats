@@ -15,9 +15,10 @@ async def evaluate_paper(
 	paper: Paper,
 	personas: list[PersonaConfig],
 	model: str,
+	api_base: str | None = None,
 ) -> PaperCard:
 	tasks = [
-		run_persona(persona, paper, model)
+		run_persona(persona, paper, model, api_base)
 		for persona in personas
 	]
 	results: list[PersonaResult] = await asyncio.gather(
@@ -30,6 +31,7 @@ async def run_pipeline(
 	papers: list[Paper],
 	personas: list[PersonaConfig],
 	model: str,
+	api_base: str | None = None,
 ) -> list[PaperCard]:
 	cards = []
 	with Progress(
@@ -43,7 +45,7 @@ async def run_pipeline(
 		)
 		for paper in papers:
 			card = await evaluate_paper(
-				paper, personas, model
+				paper, personas, model, api_base
 			)
 			cards.append(card)
 			progress.advance(task)
