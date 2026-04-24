@@ -23,6 +23,7 @@ class PersonaConfig:
 	prompt: str
 	scored_fields: list[str]
 	model: str | None = None
+	enabled: bool = True
 
 
 @dataclass

@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 from rich import print as rprint
 
+from labrats.config_server import serve_config
 from labrats.db import (
 	already_scraped,
 	enforce_cap,
@@ -166,6 +167,21 @@ def init(
 
 
 @app.command()
+def config(
+	config_dir: Path = typer.Option(
+		None, help=_CFG_HELP
+	),
+	port: int = typer.Option(
+		8484, help="Port for config server",
+	),
+):
+	"""Open the config UI in your browser."""
+	cfg = config_dir or _config_dir()
+	_require_config(cfg)
+	serve_config(cfg, port)
+
+
+@app.command()
 def run(
 	start: str = typer.Option(
 		None,
@@ -253,7 +269,10 @@ def run(
 	for profile in profiles:
 		pname = profile["name"]
 		pnames = profile.get("personas")
-		personas = load_personas(cfg, pnames)
+		personas = [
+			p for p in load_personas(cfg, pnames)
+			if p.enabled
+		]
 		if not personas:
 			rprint(
 				f"[yellow]{pname}: no personas, "
@@ -352,7 +371,10 @@ def preview(
 		pname = profile["name"]
 		filtered = filter_by_topics(papers, profile)
 		pnames = profile.get("personas")
-		personas = load_personas(cfg, pnames)
+		personas = [
+			p for p in load_personas(cfg, pnames)
+			if p.enabled
+		]
 		rprint(f"[bold]{pname}[/bold]")
 		rprint(
 			f"  {len(filtered)} papers  "
@@ -412,7 +434,10 @@ def test(
 
 	pname = matched_profile["name"]
 	pnames = matched_profile.get("personas")
-	personas = load_personas(cfg, pnames)
+	personas = [
+		p for p in load_personas(cfg, pnames)
+		if p.enabled
+	]
 	paper = matched_papers[0]
 
 	rprint(

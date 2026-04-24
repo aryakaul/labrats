@@ -1,10 +1,18 @@
 import json
+import re
 from pathlib import Path
 
 import yaml
 from litellm import acompletion
 
 from labrats.models import Paper, PersonaConfig, PersonaResult
+
+
+def _slugify(name: str) -> str:
+	s = name.lower().strip()
+	s = re.sub(r"[^a-z0-9\s_-]", "", s)
+	s = re.sub(r"[\s-]+", "_", s)
+	return s.strip("_")
 
 
 def load_profiles(config_dir: Path) -> list[dict]:
@@ -15,6 +23,18 @@ def load_profiles(config_dir: Path) -> list[dict]:
 	if "profiles" not in data:
 		return [{"name": "Default", **data}]
 	return data["profiles"]
+
+
+def save_profiles(
+	config_dir: Path, profiles: list[dict]
+) -> None:
+	path = config_dir / "topics.yaml"
+	with open(path, "w") as f:
+		yaml.safe_dump(
+			{"profiles": profiles}, f,
+			default_flow_style=False,
+			sort_keys=False,
+		)
 
 
 def load_personas(
@@ -34,8 +54,53 @@ def load_personas(
 			prompt=data["prompt"],
 			scored_fields=data["scored_fields"],
 			model=data.get("model"),
+			enabled=data.get("enabled", True),
 		))
 	return personas
+
+
+def save_persona(
+	config_dir: Path,
+	persona: dict,
+	stem: str | None = None,
+) -> str:
+	"""Write persona dict to YAML. Returns the stem."""
+	persona_dir = config_dir / "personas"
+	persona_dir.mkdir(parents=True, exist_ok=True)
+	new_stem = _slugify(persona["name"])
+	# rename file if stem changed
+	if stem and stem != new_stem:
+		old = persona_dir / f"{stem}.yaml"
+		if old.exists():
+			old.unlink()
+	path = persona_dir / f"{new_stem}.yaml"
+	data = {
+		"name": persona["name"],
+		"role": persona["role"],
+		"prompt": persona["prompt"],
+		"scored_fields": persona["scored_fields"],
+	}
+	if persona.get("model"):
+		data["model"] = persona["model"]
+	if not persona.get("enabled", True):
+		data["enabled"] = False
+	with open(path, "w") as f:
+		yaml.safe_dump(
+			data, f,
+			default_flow_style=False,
+			sort_keys=False,
+		)
+	return new_stem
+
+
+def delete_persona(
+	config_dir: Path, stem: str
+) -> bool:
+	path = config_dir / "personas" / f"{stem}.yaml"
+	if path.exists():
+		path.unlink()
+		return True
+	return False
 
 
 def _build_messages(
