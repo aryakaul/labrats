@@ -38,196 +38,197 @@ CREATE TABLE IF NOT EXISTS scrape_log (
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:
-	db_path.parent.mkdir(parents=True, exist_ok=True)
-	conn = sqlite3.connect(db_path)
-	conn.row_factory = sqlite3.Row
-	conn.executescript(_SCHEMA)
-	# migrate existing DBs that predate the model column
-	cols = {
-		r[1]
-		for r in conn.execute("PRAGMA table_info(results)")
-	}
-	if "model" not in cols:
-		conn.execute(
-			"ALTER TABLE results "
-			"ADD COLUMN model TEXT NOT NULL DEFAULT ''"
-		)
-	conn.commit()
-	return conn
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.executescript(_SCHEMA)
+    # migrate existing DBs that predate the model column
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(results)")}
+    if "model" not in cols:
+        conn.execute(
+            "ALTER TABLE results " "ADD COLUMN model TEXT NOT NULL DEFAULT ''"
+        )
+    conn.commit()
+    return conn
 
 
 def already_scraped(
-	conn: sqlite3.Connection,
-	profile: str,
-	today: str,
+    conn: sqlite3.Connection,
+    profile: str,
+    today: str,
 ) -> bool:
-	row = conn.execute(
-		"SELECT 1 FROM scrape_log "
-		"WHERE profile = ? AND scraped_on = ?",
-		(profile, today),
-	).fetchone()
-	return row is not None
+    row = conn.execute(
+        "SELECT 1 FROM scrape_log " "WHERE profile = ? AND scraped_on = ?",
+        (profile, today),
+    ).fetchone()
+    return row is not None
 
 
 def log_scrape(
-	conn: sqlite3.Connection,
-	profile: str,
-	today: str,
+    conn: sqlite3.Connection,
+    profile: str,
+    today: str,
 ) -> None:
-	conn.execute(
-		"INSERT OR IGNORE INTO scrape_log "
-		"(profile, scraped_on) VALUES (?, ?)",
-		(profile, today),
-	)
-	conn.commit()
+    conn.execute(
+        "INSERT OR IGNORE INTO scrape_log "
+        "(profile, scraped_on) VALUES (?, ?)",
+        (profile, today),
+    )
+    conn.commit()
 
 
 def upsert_papers(
-	conn: sqlite3.Connection,
-	papers: list[Paper],
-	profile: str,
-	today: str,
+    conn: sqlite3.Connection,
+    papers: list[Paper],
+    profile: str,
+    today: str,
 ) -> None:
-	conn.executemany(
-		"""
+    conn.executemany(
+        """
 		INSERT OR REPLACE INTO papers
 		(doi, profile, title, abstract, authors,
 		 category, date, url, fetched_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		""",
-		[
-			(
-				p.doi, profile, p.title, p.abstract,
-				json.dumps(p.authors), p.category,
-				p.date, p.url, today,
-			)
-			for p in papers
-		],
-	)
-	conn.commit()
+        [
+            (
+                p.doi,
+                profile,
+                p.title,
+                p.abstract,
+                json.dumps(p.authors),
+                p.category,
+                p.date,
+                p.url,
+                today,
+            )
+            for p in papers
+        ],
+    )
+    conn.commit()
 
 
 def enforce_cap(
-	conn: sqlite3.Connection,
-	profile: str,
-	max_papers: int,
+    conn: sqlite3.Connection,
+    profile: str,
+    max_papers: int,
 ) -> None:
-	rows = conn.execute(
-		"SELECT doi FROM papers WHERE profile = ? "
-		"ORDER BY date DESC, fetched_at DESC "
-		"LIMIT ?",
-		(profile, max_papers),
-	).fetchall()
-	if not rows:
-		return
-	keep = tuple(r[0] for r in rows)
-	if len(keep) < max_papers:
-		return  # under cap, nothing to trim
-	ph = ",".join("?" * len(keep))
-	args = (profile, *keep)
-	conn.execute(
-		f"DELETE FROM results "
-		f"WHERE profile = ? AND doi NOT IN ({ph})",
-		args,
-	)
-	conn.execute(
-		f"DELETE FROM papers "
-		f"WHERE profile = ? AND doi NOT IN ({ph})",
-		args,
-	)
-	conn.commit()
+    rows = conn.execute(
+        "SELECT doi FROM papers WHERE profile = ? "
+        "ORDER BY date DESC, fetched_at DESC "
+        "LIMIT ?",
+        (profile, max_papers),
+    ).fetchall()
+    if not rows:
+        return
+    keep = tuple(r[0] for r in rows)
+    if len(keep) < max_papers:
+        return  # under cap, nothing to trim
+    ph = ",".join("?" * len(keep))
+    args = (profile, *keep)
+    conn.execute(
+        f"DELETE FROM results " f"WHERE profile = ? AND doi NOT IN ({ph})",
+        args,
+    )
+    conn.execute(
+        f"DELETE FROM papers " f"WHERE profile = ? AND doi NOT IN ({ph})",
+        args,
+    )
+    conn.commit()
 
 
 def load_papers(
-	conn: sqlite3.Connection,
-	profile: str,
+    conn: sqlite3.Connection,
+    profile: str,
 ) -> list[Paper]:
-	rows = conn.execute(
-		"SELECT * FROM papers WHERE profile = ? "
-		"ORDER BY date DESC",
-		(profile,),
-	).fetchall()
-	return [
-		Paper(
-			doi=r["doi"],
-			title=r["title"],
-			authors=json.loads(r["authors"]),
-			author_corresponding="",
-			author_corresponding_institution="",
-			abstract=r["abstract"],
-			category=r["category"],
-			date=r["date"],
-			version="",
-			type="",
-			url=r["url"],
-		)
-		for r in rows
-	]
+    rows = conn.execute(
+        "SELECT * FROM papers WHERE profile = ? " "ORDER BY date DESC",
+        (profile,),
+    ).fetchall()
+    return [
+        Paper(
+            doi=r["doi"],
+            title=r["title"],
+            authors=json.loads(r["authors"]),
+            author_corresponding="",
+            author_corresponding_institution="",
+            abstract=r["abstract"],
+            category=r["category"],
+            date=r["date"],
+            version="",
+            type="",
+            url=r["url"],
+        )
+        for r in rows
+    ]
 
 
 def papers_needing_eval(
-	conn: sqlite3.Connection,
-	papers: list[Paper],
-	profile: str,
-	persona_names: list[str],
+    conn: sqlite3.Connection,
+    papers: list[Paper],
+    profile: str,
+    persona_names: list[str],
 ) -> list[Paper]:
-	if not persona_names or not papers:
-		return []
-	ph = ",".join("?" * len(persona_names))
-	rows = conn.execute(
-		f"SELECT doi FROM results "
-		f"WHERE profile = ? "
-		f"AND persona_name IN ({ph}) "
-		f"GROUP BY doi "
-		f"HAVING COUNT(DISTINCT persona_name) = ?",
-		(profile, *persona_names, len(persona_names)),
-	).fetchall()
-	done = {r["doi"] for r in rows}
-	return [p for p in papers if p.doi not in done]
+    if not persona_names or not papers:
+        return []
+    ph = ",".join("?" * len(persona_names))
+    rows = conn.execute(
+        f"SELECT doi FROM results "
+        f"WHERE profile = ? "
+        f"AND persona_name IN ({ph}) "
+        f"GROUP BY doi "
+        f"HAVING COUNT(DISTINCT persona_name) = ?",
+        (profile, *persona_names, len(persona_names)),
+    ).fetchall()
+    done = {r["doi"] for r in rows}
+    return [p for p in papers if p.doi not in done]
 
 
 def upsert_results(
-	conn: sqlite3.Connection,
-	doi: str,
-	profile: str,
-	persona_results: list[PersonaResult],
+    conn: sqlite3.Connection,
+    doi: str,
+    profile: str,
+    persona_results: list[PersonaResult],
 ) -> None:
-	now = datetime.utcnow().isoformat()
-	conn.executemany(
-		"""
+    now = datetime.utcnow().isoformat()
+    conn.executemany(
+        """
 		INSERT OR REPLACE INTO results
 		(doi, profile, persona_name, scores, summary,
 		 model, run_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 		""",
-		[
-			(
-				doi, profile, r.persona_name,
-				json.dumps(r.scores), r.summary,
-				r.model, now,
-			)
-			for r in persona_results
-		],
-	)
-	conn.commit()
+        [
+            (
+                doi,
+                profile,
+                r.persona_name,
+                json.dumps(r.scores),
+                r.summary,
+                r.model,
+                now,
+            )
+            for r in persona_results
+        ],
+    )
+    conn.commit()
 
 
 def load_results(
-	conn: sqlite3.Connection,
-	doi: str,
-	profile: str,
+    conn: sqlite3.Connection,
+    doi: str,
+    profile: str,
 ) -> dict[str, PersonaResult]:
-	rows = conn.execute(
-		"SELECT * FROM results "
-		"WHERE doi = ? AND profile = ?",
-		(doi, profile),
-	).fetchall()
-	return {
-		r["persona_name"]: PersonaResult(
-			persona_name=r["persona_name"],
-			scores=json.loads(r["scores"]),
-			summary=r["summary"],
-			model=r["model"] or "",
-		)
-		for r in rows
-	}
+    rows = conn.execute(
+        "SELECT * FROM results " "WHERE doi = ? AND profile = ?",
+        (doi, profile),
+    ).fetchall()
+    return {
+        r["persona_name"]: PersonaResult(
+            persona_name=r["persona_name"],
+            scores=json.loads(r["scores"]),
+            summary=r["summary"],
+            model=r["model"] or "",
+        )
+        for r in rows
+    }
