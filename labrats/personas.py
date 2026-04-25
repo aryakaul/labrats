@@ -95,12 +95,10 @@ def save_persona(
 
 def delete_persona(
 	config_dir: Path, stem: str
-) -> bool:
+) -> None:
 	path = config_dir / "personas" / f"{stem}.yaml"
 	if path.exists():
 		path.unlink()
-		return True
-	return False
 
 
 def _build_messages(

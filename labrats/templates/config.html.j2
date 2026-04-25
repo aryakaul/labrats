@@ -208,7 +208,7 @@ header {
 .form-group {
 	margin-bottom: 0.6rem;
 }
-.form-group label {
+.form-group > label {
 	display: block;
 	font-size: 0.75rem;
 	font-weight: 600;
@@ -244,20 +244,46 @@ header {
 	margin-top: 0.1rem;
 }
 
-/* ── persona checkboxes in profiles ── */
-.persona-checks {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.5rem;
+/* ── checkbox grids ── */
+.check-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+	gap: 1px;
+	background: #eee;
+	border: 1px solid #eee;
+	border-radius: 3px;
+	overflow: hidden;
 }
-.persona-check {
+.check-item {
 	display: flex;
 	align-items: center;
-	gap: 0.3rem;
-	font-size: 0.8rem;
-	color: #555;
+	gap: 0.5rem;
+	font-size: 0.72rem;
+	color: #888;
+	background: #fff;
+	padding: 0.25rem 0.45rem;
+	cursor: pointer;
+	user-select: none;
 }
-.persona-check input { accent-color: #1a1a1a; }
+.check-item:hover { background: #f8f8f8; }
+.check-item:has(input:checked) {
+	color: #1a1a1a;
+	font-weight: 600;
+	background: #f4f7ff;
+}
+.check-item input {
+	accent-color: #1a1a1a;
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+}
+.check-all {
+	grid-column: 1 / -1;
+	font-weight: 600;
+	color: #555;
+	background: #fafafa;
+	border-bottom: 1px solid #ddd;
+}
 
 /* ── toast ── */
 .toast {
@@ -374,6 +400,48 @@ function api(method, path, body) {
     opts.body = JSON.stringify(body);
   }
   return fetch(path, opts).then(function(r) { return r.json(); });
+}
+
+function checkboxesHTML(items, selected, valueFn, labelFn) {
+  var allChecked = items.every(function(item) {
+    var val = valueFn ? valueFn(item) : item;
+    return selected.indexOf(val) !== -1;
+  });
+  var html = '<label class="check-item check-all">' +
+    '<input type="checkbox"' +
+      (allChecked ? " checked" : "") +
+      ' onchange="toggleAll(this)">' +
+    'Select all' +
+  '</label>';
+  html += items.map(function(item) {
+    var val = valueFn ? valueFn(item) : item;
+    var lbl = labelFn ? labelFn(item) : item;
+    var checked = selected.indexOf(val) !== -1
+      ? " checked" : "";
+    return (
+      '<label class="check-item">' +
+        '<input type="checkbox" value="' + esc(val) +
+          '"' + checked + '>' +
+        esc(lbl) +
+      '</label>'
+    );
+  }).join("");
+  return html;
+}
+
+function toggleAll(masterCb) {
+  var grid = masterCb.closest(".check-grid");
+  var boxes = grid.querySelectorAll(
+    'input[type=checkbox]:not([onchange])');
+  boxes.forEach(function(cb) { cb.checked = masterCb.checked; });
+}
+
+function readChecked(container, selector) {
+  return Array.from(container.querySelectorAll(
+    selector + " input[type=checkbox]"
+  )).filter(function(cb) {
+    return cb.checked;
+  }).map(function(cb) { return cb.value; });
 }
 
 /* ── tabs ── */
@@ -630,41 +698,14 @@ function profileFormHTML(prof, idx, mode) {
     ? "toggleProfileEdit(" + idx + ")"
     : "hideNewProfile()";
 
-  var catChecks = BIORXIV_CATEGORIES.map(function(c) {
-    var checked = selCats.indexOf(c) !== -1
-      ? " checked" : "";
-    return (
-      '<label class="persona-check">' +
-        '<input type="checkbox" value="' + esc(c) +
-          '"' + checked + '>' +
-        esc(c) +
-      '</label>'
-    );
-  }).join("");
-
-  var arxivChecks = ARXIV_CATEGORIES.map(function(c) {
-    var checked = selArxiv.indexOf(c) !== -1
-      ? " checked" : "";
-    return (
-      '<label class="persona-check">' +
-        '<input type="checkbox" value="' + esc(c) +
-          '"' + checked + '>' +
-        esc(c) +
-      '</label>'
-    );
-  }).join("");
-
-  var personaChecks = personas.map(function(p) {
-    var checked = assigned.indexOf(p.stem) !== -1
-      ? " checked" : "";
-    return (
-      '<label class="persona-check">' +
-        '<input type="checkbox" value="' + esc(p.stem) +
-          '"' + checked + '>' +
-        esc(p.name) +
-      '</label>'
-    );
-  }).join("");
+  var catChecks = checkboxesHTML(
+    BIORXIV_CATEGORIES, selCats);
+  var arxivChecks = checkboxesHTML(
+    ARXIV_CATEGORIES, selArxiv);
+  var personaChecks = checkboxesHTML(
+    personas, assigned,
+    function(p) { return p.stem; },
+    function(p) { return p.name; });
 
   return (
     '<div class="form-group">' +
@@ -680,13 +721,13 @@ function profileFormHTML(prof, idx, mode) {
     '</div>' +
     '<div class="form-group">' +
       '<label>Categories (biorxiv)</label>' +
-      '<div class="persona-checks pr-cats">' +
+      '<div class="check-grid pr-cats">' +
         catChecks +
       '</div>' +
     '</div>' +
     '<div class="form-group">' +
       '<label>Categories (arxiv)</label>' +
-      '<div class="persona-checks pr-arxiv">' +
+      '<div class="check-grid pr-arxiv">' +
         arxivChecks +
       '</div>' +
     '</div>' +
@@ -697,7 +738,7 @@ function profileFormHTML(prof, idx, mode) {
     '</div>' +
     '<div class="form-group">' +
       '<label>Personas</label>' +
-      '<div class="persona-checks pr-personas">' +
+      '<div class="check-grid pr-personas">' +
         personaChecks +
       '</div>' +
       '<div class="form-hint">' +
@@ -721,29 +762,15 @@ function renderProfiles() {
 }
 
 function readProfileForm(container) {
-  var checks = container.querySelectorAll(
-    ".pr-personas input[type=checkbox]"
-  );
-  var selected = [];
-  checks.forEach(function(cb) {
-    if (cb.checked) selected.push(cb.value);
-  });
+  var selected = readChecked(container, ".pr-personas");
   var data = {
     name: container.querySelector(".pr-name").value.trim(),
     keywords: container.querySelector(".pr-kws")
       .value.split(",").map(function(s) {
         return s.trim();
       }).filter(Boolean),
-    categories: Array.from(container.querySelectorAll(
-      ".pr-cats input[type=checkbox]"
-    )).filter(function(cb) {
-      return cb.checked;
-    }).map(function(cb) { return cb.value; }),
-    arxiv_categories: Array.from(container.querySelectorAll(
-      ".pr-arxiv input[type=checkbox]"
-    )).filter(function(cb) {
-      return cb.checked;
-    }).map(function(cb) { return cb.value; }),
+    categories: readChecked(container, ".pr-cats"),
+    arxiv_categories: readChecked(container, ".pr-arxiv"),
     max_papers: parseInt(
       container.querySelector(".pr-max").value, 10
     ) || 500,

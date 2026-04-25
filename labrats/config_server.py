@@ -3,11 +3,11 @@ import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
+import yaml
 from jinja2 import Environment, FileSystemLoader
 
 from labrats.personas import (
 	delete_persona,
-	load_personas,
 	load_profiles,
 	save_persona,
 	save_profiles,
@@ -16,29 +16,22 @@ from labrats.personas import (
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 
 
-def _persona_to_dict(p, stem):
-	return {
-		"stem": stem,
-		"name": p.name,
-		"role": p.role,
-		"prompt": p.prompt,
-		"scored_fields": p.scored_fields,
-		"model": p.model or "",
-		"enabled": p.enabled,
-	}
-
-
 def _list_personas(config_dir):
 	persona_dir = config_dir / "personas"
-	personas = load_personas(config_dir)
-	stems = sorted(
-		p.stem
-		for p in persona_dir.glob("*.yaml")
-	)
-	return [
-		_persona_to_dict(p, s)
-		for p, s in zip(personas, stems)
-	]
+	result = []
+	for path in sorted(persona_dir.glob("*.yaml")):
+		with open(path) as f:
+			data = yaml.safe_load(f)
+		result.append({
+			"stem": path.stem,
+			"name": data["name"],
+			"role": data["role"],
+			"prompt": data["prompt"],
+			"scored_fields": data["scored_fields"],
+			"model": data.get("model", ""),
+			"enabled": data.get("enabled", True),
+		})
+	return result
 
 
 class ConfigHandler(BaseHTTPRequestHandler):
