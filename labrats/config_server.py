@@ -6,11 +6,17 @@ from pathlib import Path
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
+from labrats.models_registry import (
+    PROVIDER_DOCS,
+    list_cloud_models,
+)
 from labrats.personas import (
     delete_persona,
     load_profiles,
+    load_settings,
     save_persona,
     save_profiles,
+    save_settings,
 )
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -70,6 +76,32 @@ class ConfigHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/profiles":
             profiles = load_profiles(self.config_dir)
             self._send_json(profiles)
+        elif self.path == "/api/settings":
+            data = load_settings(self.config_dir)
+            # mask key values for display
+            keys = data.get("api_keys", {})
+            masked = {}
+            for k, v in keys.items():
+                if v and len(v) > 8:
+                    masked[k] = v[:4] + "*" * (len(v) - 8) + v[-4:]
+                elif v:
+                    masked[k] = "****"
+                else:
+                    masked[k] = ""
+            self._send_json({"api_keys": masked})
+        elif self.path == "/api/models":
+            settings = load_settings(self.config_dir)
+            api_keys = settings.get("api_keys", {})
+            cloud = list_cloud_models()
+            result = {}
+            for provider, models in cloud.items():
+                has_key = bool(api_keys.get(provider, ""))
+                result[provider] = {
+                    "models": models,
+                    "active": has_key,
+                    "docs": PROVIDER_DOCS.get(provider, ""),
+                }
+            self._send_json(result)
         elif self.path == "/" or self.path == "":
             env = Environment(
                 loader=FileSystemLoader(str(TEMPLATE_DIR)),
@@ -96,6 +128,21 @@ class ConfigHandler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_PUT(self):
+        if self.path == "/api/settings":
+            data = self._read_body()
+            new_keys = data.get("api_keys", {})
+            # merge: only update keys that aren't masked
+            current = load_settings(self.config_dir)
+            cur_keys = current.get("api_keys", {})
+            for k, v in new_keys.items():
+                if v and "*" not in v:
+                    cur_keys[k] = v
+                elif not v:
+                    cur_keys[k] = ""
+            current["api_keys"] = cur_keys
+            save_settings(self.config_dir, current)
+            self._send_json({"ok": True})
+            return
         parts = self.path.split("/")
         # /api/personas/<stem>
         if len(parts) == 4 and parts[1] == "api" and parts[2] == "personas":

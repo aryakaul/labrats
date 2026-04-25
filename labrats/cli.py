@@ -20,8 +20,16 @@ from labrats.db import (
     upsert_results,
 )
 from labrats.digest import render_digest
-from labrats.models import Paper, PaperCard
-from labrats.personas import load_personas, load_profiles
+import requests
+
+from labrats.models import Paper, PaperCard, PersonaConfig
+from labrats.models_registry import (
+    PROVIDER_DOCS,
+    discover_local,
+    list_cloud_models,
+    list_local_models,
+)
+from labrats.personas import load_personas, load_profiles, load_settings
 from labrats.pipeline import run_pipeline
 from labrats.scraper import (
     fetch_papers,
@@ -73,6 +81,108 @@ def _dedup(papers: list[Paper]) -> list[Paper]:
             seen.add(p.doi)
             result.append(p)
     return result
+
+
+_PROVIDER_KEYS = {
+	"openai": "OPENAI_API_KEY",
+	"anthropic": "ANTHROPIC_API_KEY",
+	"gemini": "GOOGLE_API_KEY",
+	"google": "GOOGLE_API_KEY",
+	"groq": "GROQ_API_KEY",
+	"together_ai": "TOGETHERAI_API_KEY",
+	"mistral": "MISTRAL_API_KEY",
+	"cohere": "COHERE_API_KEY",
+}
+
+
+def _bare_model(model: str) -> str:
+	"""Strip provider prefix: 'openai/gpt-4o' -> 'gpt-4o'."""
+	return model.split("/", 1)[-1]
+
+
+def _collect_models(
+	default: str,
+	personas: list[PersonaConfig],
+	profiles: list[dict] | None = None,
+) -> list[str]:
+	models = {default}
+	if profiles:
+		for p in profiles:
+			if p.get("model"):
+				models.add(p["model"])
+	for p in personas:
+		if p.model:
+			models.add(p.model)
+	return list(models)
+
+
+def _preflight_check(
+	model: str,
+	personas: list[PersonaConfig],
+	api_base: str | None,
+	config_dir: Path,
+	profiles: list[dict] | None = None,
+) -> None:
+	models = _collect_models(model, personas, profiles)
+	settings = load_settings(config_dir)
+	api_keys = settings.get("api_keys", {})
+
+	if api_base:
+		# local endpoint — check model availability
+		try:
+			resp = requests.get(
+				f"{api_base}/models", timeout=5,
+			)
+			resp.raise_for_status()
+			data = resp.json()
+			available = {
+				m["id"] for m in data.get("data", [])
+			}
+		except Exception as e:
+			rprint(
+				f"[red]Cannot reach local endpoint: "
+				f"{api_base}/models[/red]\n  {e}"
+			)
+			raise typer.Exit(1)
+
+		for m in models:
+			bare = _bare_model(m)
+			if bare not in available:
+				avail_str = "\n  ".join(sorted(available))
+				rprint(
+					f"[red]Model not available: "
+					f"{bare}[/red]\n"
+					f"Available models:\n  {avail_str}"
+				)
+				raise typer.Exit(1)
+		return
+
+	# cloud — check API keys
+	cfg_path = config_dir / "settings.yaml"
+	missing = []
+	for m in models:
+		provider = m.split("/", 1)[0]
+		env_var = _PROVIDER_KEYS.get(provider)
+		if not env_var:
+			continue
+		cfg_key = api_keys.get(provider, "")
+		if cfg_key:
+			os.environ[env_var] = cfg_key
+		elif not os.environ.get(env_var):
+			missing.append((m, provider, env_var))
+
+	if missing:
+		lines = "\n  ".join(
+			f"{m} -> ${var}"
+			for m, _, var in missing
+		)
+		rprint(
+			f"[red]Missing API keys:[/red]\n  {lines}\n"
+			f"\nSet via {cfg_path} or environment variable."
+			f"\nRun [bold]labrats config[/bold] to manage "
+			f"keys in the browser."
+		)
+		raise typer.Exit(1)
 
 
 def _fetch_from_sources(
@@ -136,6 +246,8 @@ def init(
             skipped.append(str(rel))
         else:
             shutil.copy2(src, dst)
+            if rel.name == "settings.yaml":
+                dst.chmod(0o600)
             copied.append(str(rel))
 
     for f in copied:
@@ -143,6 +255,88 @@ def init(
     for f in skipped:
         rprint(f"  [yellow]skipped[/yellow]  {f}" "  (--force to overwrite)")
     rprint(f"\nConfig dir: {target}")
+
+
+@app.command()
+def models(
+    config_dir: Path = typer.Option(None, help=_CFG_HELP),
+    api_base: str = typer.Option(None, help=_API_HELP),
+):
+    """List available LLM models."""
+    cfg = config_dir or _config_dir()
+    settings = load_settings(cfg)
+    api_keys = settings.get("api_keys", {})
+    extra = settings.get("local_endpoints", [])
+
+    # ── local models ──
+    if api_base:
+        # explicit endpoint — just show that one
+        try:
+            local = list_local_models(api_base)
+        except Exception as e:
+            rprint(
+                f"[red]Cannot reach {api_base}:"
+                f"[/red] {e}"
+            )
+            raise typer.Exit(1)
+        rprint(f"[bold]Local ({api_base}):[/bold]")
+        for m in local:
+            rprint(f"  {m}")
+        if not local:
+            rprint("  (none loaded)")
+        return
+
+    # auto-discover local endpoints
+    local_results = discover_local(extra)
+    if local_results:
+        rprint("[bold]Local models:[/bold]")
+        for label, ms in local_results.items():
+            rprint(f"\n  [green]{label}[/green]")
+            for m in ms:
+                rprint(f"    {m}")
+
+    # ── cloud models ──
+    cloud = list_cloud_models()
+    active = []
+    inactive = []
+    for provider in sorted(cloud.keys()):
+        cfg_key = api_keys.get(provider, "")
+        env_var = _PROVIDER_KEYS.get(provider, "")
+        has_key = bool(cfg_key) or bool(
+            os.environ.get(env_var)
+        )
+        if has_key:
+            active.append(provider)
+        else:
+            inactive.append(provider)
+
+    if active:
+        rprint("\n[bold]Cloud providers:[/bold]")
+        for p in active:
+            ms = cloud.get(p, [])
+            doc = PROVIDER_DOCS.get(p, "")
+            rprint(
+                f"\n  [green]{p}[/green] "
+                f"({len(ms)} models)"
+            )
+            if doc:
+                rprint(f"  {doc}")
+            for m in ms:
+                rprint(f"    {m}")
+    elif not local_results:
+        rprint("[yellow]No active providers.[/yellow]")
+        rprint(
+            "Configure API keys via "
+            "[bold]labrats config[/bold] or "
+            "settings.yaml."
+        )
+
+    if inactive:
+        rprint("\n[dim]Inactive (no key):[/dim]")
+        for p in inactive:
+            doc = PROVIDER_DOCS.get(p, "")
+            hint = f"  {doc}" if doc else ""
+            rprint(f"  [dim]{p}{hint}[/dim]")
 
 
 @app.command()
@@ -194,6 +388,16 @@ def run(
     end = end or today
 
     profiles = load_profiles(cfg)
+
+    # preflight: verify model access before any work
+    all_personas = []
+    for p in profiles:
+        pnames = p.get("personas")
+        all_personas += [
+            x for x in load_personas(cfg, pnames) if x.enabled
+        ]
+    _preflight_check(model, all_personas, api_base, cfg, profiles)
+
     conn = open_db(db)
 
     # scrape only profiles not yet fetched today
@@ -233,11 +437,14 @@ def run(
             continue
 
         persona_names = [p.name for p in personas]
+        effective_model = profile.get("model") or model
         to_eval = papers_needing_eval(conn, db_papers, pname, persona_names)
         if to_eval:
             rprint(f"{pname}: evaluating " f"{len(to_eval)} papers")
             new_cards = asyncio.run(
-                run_pipeline(to_eval, personas, model, api_base)
+                run_pipeline(
+                    to_eval, personas, effective_model, api_base,
+                )
             )
             for card in new_cards:
                 upsert_results(conn, card.paper.doi, pname, card.results)
@@ -312,6 +519,16 @@ def test(
     cfg = config_dir or _config_dir()
     _require_config(cfg)
     profiles = load_profiles(cfg)
+
+    # preflight: verify model access before scraping
+    all_personas = []
+    for p in profiles:
+        pnames = p.get("personas")
+        all_personas += [
+            x for x in load_personas(cfg, pnames) if x.enabled
+        ]
+    _preflight_check(model, all_personas, api_base, cfg, profiles)
+
     fetch_topics = {"arxiv_categories": _union_arxiv_cats(profiles)}
     today = date.today()
     start = str(today - timedelta(days=1))
@@ -335,13 +552,16 @@ def test(
     pname = matched_profile["name"]
     pnames = matched_profile.get("personas")
     personas = [p for p in load_personas(cfg, pnames) if p.enabled]
+    effective_model = matched_profile.get("model") or model
     paper = matched_papers[0]
 
     rprint(
         f"[bold]Profile:[/bold] {pname}\n"
         f"[bold]Paper:[/bold] {paper.title}\n"
     )
-    cards = asyncio.run(run_pipeline([paper], personas, model, api_base))
+    cards = asyncio.run(
+        run_pipeline([paper], personas, effective_model, api_base)
+    )
     cards = score_cards(cards)
     card = cards[0]
 

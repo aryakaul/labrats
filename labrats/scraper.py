@@ -22,12 +22,12 @@ def fetch_papers(
         resp = requests.get(url, timeout=30)
         resp.raise_for_status()
         data = resp.json()
-        status = data.get("messages", [{}])[0].get("status", "")
-        if status not in ("ok", ""):
-            raise RuntimeError(f"biorxiv API: {status}")
         collection = data.get("collection", [])
         if not collection:
             break
+        status = data.get("messages", [{}])[0].get("status", "")
+        if status not in ("ok", ""):
+            raise RuntimeError(f"biorxiv API: {status}")
         for entry in collection:
             papers.append(_parse_paper(entry))
         cursor += len(collection)

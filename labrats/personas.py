@@ -15,6 +15,24 @@ def _slugify(name: str) -> str:
     return s.strip("_")
 
 
+def load_settings(config_dir: Path) -> dict:
+	path = config_dir / "settings.yaml"
+	if not path.exists():
+		return {"api_keys": {}}
+	with open(path) as f:
+		data = yaml.safe_load(f) or {}
+	return data
+
+
+def save_settings(config_dir: Path, data: dict) -> None:
+	path = config_dir / "settings.yaml"
+	with open(path, "w") as f:
+		yaml.safe_dump(
+			data, f, default_flow_style=False, sort_keys=False,
+		)
+	path.chmod(0o600)
+
+
 def load_profiles(config_dir: Path) -> list[dict]:
     path = config_dir / "topics.yaml"
     with open(path) as f:

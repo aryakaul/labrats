@@ -318,6 +318,10 @@ header {
       <span>Profiles</span>
       <span class="tab-count" id="cnt-profiles">0</span>
     </button>
+    <button class="tab-btn" id="tab-settings"
+            onclick="showTab('settings')">
+      <span>Settings</span>
+    </button>
   </nav>
 
   <main class="content">
@@ -348,6 +352,27 @@ header {
       <div id="profile-list"></div>
     </div>
 
+    <!-- ── Settings panel ── -->
+    <div class="panel" id="panel-settings">
+      <div class="card">
+        <details id="api-keys-details">
+          <summary style="cursor:pointer;font-size:1rem;
+            font-weight:600;padding:0.25rem 0;
+            user-select:none">API Keys</summary>
+          <p class="card-meta" style="margin:0.75rem 0">
+            Keys are stored in
+            <code>~/.config/labrats/settings.yaml</code>.
+            Environment variables are used as fallback.
+          </p>
+          <div id="settings-fields"></div>
+          <div class="btn-row">
+            <button class="btn btn-primary"
+                    onclick="saveSettings()">Save</button>
+          </div>
+        </details>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -356,6 +381,34 @@ header {
 <script>
 var personas = [];
 var profiles = [];
+var _dlCounter = 0;
+
+function activeModelOptions() {
+  var opts = [];
+  Object.keys(modelsData).forEach(function(provider) {
+    var info = modelsData[provider];
+    if (!info.active) return;
+    (info.models || []).forEach(function(m) {
+      opts.push(m);
+    });
+  });
+  return opts;
+}
+
+function modelInputHTML(cls, value) {
+  var id = "dl-" + (++_dlCounter);
+  var opts = activeModelOptions();
+  var html =
+    '<input type="text" class="' + cls + '" value="' +
+      esc(value) + '" list="' + id + '" ' +
+      'autocomplete="off">' +
+    '<datalist id="' + id + '">';
+  opts.forEach(function(m) {
+    html += '<option value="' + esc(m) + '">';
+  });
+  html += '</datalist>';
+  return html;
+}
 
 var BIORXIV_CATEGORIES = [
   "animal behavior and cognition", "biochemistry", "bioengineering",
@@ -446,7 +499,7 @@ function readChecked(container, selector) {
 
 /* ── tabs ── */
 function showTab(name) {
-  ["personas", "profiles"].forEach(function(t) {
+  ["personas", "profiles", "settings"].forEach(function(t) {
     document.getElementById("tab-" + t)
       .classList.toggle("active", t === name);
     document.getElementById("panel-" + t)
@@ -530,8 +583,7 @@ function personaFormHTML(p, mode) {
     '</div>' +
     '<div class="form-group">' +
       '<label>Model override</label>' +
-      '<input type="text" class="pf-model" value="' +
-        esc(model) + '">' +
+      modelInputHTML("pf-model", model) +
       '<div class="form-hint">Leave blank for default</div>' +
     '</div>' +
     '<div class="btn-row">' +
@@ -659,6 +711,10 @@ function profileCardHTML(prof, idx) {
       (assigned.length > 1 ? "s" : "") + " assigned"
     : "all personas";
   var maxP = prof.max_papers || 500;
+  var profModel = prof.model
+    ? '<span class="badge badge-model">' +
+        esc(prof.model) + '</span>'
+    : "";
   return (
     '<div class="card" id="prc-' + idx + '">' +
       '<div class="card-header">' +
@@ -669,7 +725,7 @@ function profileCardHTML(prof, idx) {
         '</span>' +
       '</div>' +
       '<div class="badges" style="margin-bottom:0.3rem">' +
-        kws + cats + arxiv +
+        profModel + kws + cats + arxiv +
       '</div>' +
       '<div class="btn-row">' +
         '<button class="btn" onclick="toggleProfileEdit(' +
@@ -690,6 +746,7 @@ function profileFormHTML(prof, idx, mode) {
   var selCats = prof ? (prof.categories || []) : [];
   var selArxiv = prof ? (prof.arxiv_categories || []) : [];
   var maxP = prof ? (prof.max_papers || 500) : 500;
+  var profMdl = prof ? (prof.model || "") : "";
   var assigned = prof ? (prof.personas || []) : [];
   var action = mode === "update"
     ? "saveProfile(" + idx + ")"
@@ -718,6 +775,13 @@ function profileFormHTML(prof, idx, mode) {
       '<input type="text" class="pr-kws" value="' +
         esc(kws) + '">' +
       '<div class="form-hint">Comma-separated</div>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Default model</label>' +
+      modelInputHTML("pr-model", profMdl) +
+      '<div class="form-hint">' +
+        'Leave blank for CLI default' +
+      '</div>' +
     '</div>' +
     '<div class="form-group">' +
       '<label>Categories (biorxiv)</label>' +
@@ -763,6 +827,8 @@ function renderProfiles() {
 
 function readProfileForm(container) {
   var selected = readChecked(container, ".pr-personas");
+  var mdl = container.querySelector(".pr-model")
+    .value.trim();
   var data = {
     name: container.querySelector(".pr-name").value.trim(),
     keywords: container.querySelector(".pr-kws")
@@ -775,6 +841,7 @@ function readProfileForm(container) {
       container.querySelector(".pr-max").value, 10
     ) || 500,
   };
+  if (mdl) data.model = mdl;
   if (selected.length) data.personas = selected;
   return data;
 }
@@ -830,16 +897,107 @@ function deleteProfile(idx) {
   });
 }
 
+/* ── settings ── */
+var PROVIDERS = [
+  { key: "openai", label: "OpenAI", env: "OPENAI_API_KEY" },
+  { key: "anthropic", label: "Anthropic", env: "ANTHROPIC_API_KEY" },
+  { key: "gemini", label: "Google / Gemini", env: "GOOGLE_API_KEY" },
+  { key: "groq", label: "Groq", env: "GROQ_API_KEY" },
+  { key: "mistral", label: "Mistral", env: "MISTRAL_API_KEY" },
+  { key: "cohere", label: "Cohere", env: "COHERE_API_KEY" },
+  { key: "together_ai", label: "Together AI",
+    env: "TOGETHERAI_API_KEY" },
+];
+var settingsData = {};
+var modelsData = {};
+
+function renderSettings() {
+  var keys = settingsData.api_keys || {};
+  var html = PROVIDERS.map(function(p) {
+    var val = keys[p.key] || "";
+    var info = modelsData[p.key] || {};
+    var active = info.active || false;
+    var dot = active
+      ? '<span style="color:#2e7d32;font-size:1.1em">' +
+          '&#9679;</span>'
+      : '<span style="color:#ccc;font-size:1.1em">' +
+          '&#9679;</span>';
+    var docs = info.docs || "";
+    var docsLink = docs
+      ? ' <a href="' + esc(docs) + '" target="_blank" ' +
+          'style="font-size:0.72rem;color:#999;' +
+          'text-decoration:none">[models]</a>'
+      : "";
+    return (
+      '<div class="form-group">' +
+        '<label>' + dot + ' ' + esc(p.label) +
+          docsLink +
+          ' <span style="font-weight:normal;color:#aaa">' +
+            '($' + p.env + ')</span></label>' +
+        '<div style="display:flex;gap:0.5rem;' +
+          'align-items:center">' +
+          '<input type="password" class="sk-' +
+            p.key + '" value="' + esc(val) + '" ' +
+            'style="flex:1;padding:0.4rem 0.55rem;' +
+            'border:1px solid #ddd;border-radius:3px;' +
+            'font-family:monospace;font-size:0.83rem;' +
+            'color:#1a1a1a;background:#fafafa">' +
+          '<button class="btn" onclick="toggleVis(this)"' +
+            ' style="flex-shrink:0">Show</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join("");
+  document.getElementById("settings-fields").innerHTML = html;
+}
+
+function toggleVis(btn) {
+  var input = btn.previousElementSibling;
+  if (input.type === "password") {
+    input.type = "text";
+    btn.textContent = "Hide";
+  } else {
+    input.type = "password";
+    btn.textContent = "Show";
+  }
+}
+
+function saveSettings() {
+  var keys = {};
+  PROVIDERS.forEach(function(p) {
+    var el = document.querySelector(".sk-" + p.key);
+    if (el) keys[p.key] = el.value.trim();
+  });
+  api("PUT", "/api/settings", { api_keys: keys })
+    .then(function() {
+      toast("Settings saved");
+      // reload settings + models (key changes affect status)
+      Promise.all([
+        api("GET", "/api/settings"),
+        api("GET", "/api/models"),
+      ]).then(function(res) {
+        settingsData = res[0];
+        modelsData = res[1];
+        renderSettings();
+      });
+    });
+}
+
 /* ── init ── */
 function init() {
   Promise.all([
     api("GET", "/api/personas"),
     api("GET", "/api/profiles"),
+    api("GET", "/api/settings"),
+    api("GET", "/api/models"),
   ]).then(function(res) {
     personas = res[0];
     profiles = res[1];
+    settingsData = res[2];
+    modelsData = res[3];
     renderPersonas();
     renderProfiles();
+    renderSettings();
   });
 }
 
