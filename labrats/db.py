@@ -1,43 +1,45 @@
+"""SQLite storage for papers, persona results, and scrape history."""
+
 import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from labrats.models import Paper, PaperCard, PersonaResult
-
+from labrats.models import Paper, PersonaResult
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS papers (
-	doi        TEXT NOT NULL,
-	profile    TEXT NOT NULL,
-	title      TEXT NOT NULL,
-	abstract   TEXT NOT NULL,
-	authors    TEXT NOT NULL,
-	category   TEXT NOT NULL,
-	date       TEXT NOT NULL,
-	url        TEXT NOT NULL,
-	fetched_at TEXT NOT NULL,
-	PRIMARY KEY (doi, profile)
+    doi        TEXT NOT NULL,
+    profile    TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    abstract   TEXT NOT NULL,
+    authors    TEXT NOT NULL,
+    category   TEXT NOT NULL,
+    date       TEXT NOT NULL,
+    url        TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (doi, profile)
 );
 CREATE TABLE IF NOT EXISTS results (
-	doi          TEXT NOT NULL,
-	profile      TEXT NOT NULL,
-	persona_name TEXT NOT NULL,
-	scores       TEXT NOT NULL,
-	summary      TEXT NOT NULL,
-	model        TEXT NOT NULL DEFAULT '',
-	run_at       TEXT NOT NULL,
-	PRIMARY KEY (doi, profile, persona_name)
+    doi          TEXT NOT NULL,
+    profile      TEXT NOT NULL,
+    persona_name TEXT NOT NULL,
+    scores       TEXT NOT NULL,
+    summary      TEXT NOT NULL,
+    model        TEXT NOT NULL DEFAULT '',
+    run_at       TEXT NOT NULL,
+    PRIMARY KEY (doi, profile, persona_name)
 );
 CREATE TABLE IF NOT EXISTS scrape_log (
-	profile    TEXT NOT NULL,
-	scraped_on TEXT NOT NULL,
-	PRIMARY KEY (profile, scraped_on)
+    profile    TEXT NOT NULL,
+    scraped_on TEXT NOT NULL,
+    PRIMARY KEY (profile, scraped_on)
 );
 """
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:
+    """Open (and auto-create) the database, applying schema migrations."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -46,32 +48,25 @@ def open_db(db_path: Path) -> sqlite3.Connection:
     cols = {r[1] for r in conn.execute("PRAGMA table_info(results)")}
     if "model" not in cols:
         conn.execute(
-            "ALTER TABLE results " "ADD COLUMN model TEXT NOT NULL DEFAULT ''"
+            "ALTER TABLE results ADD COLUMN model TEXT NOT NULL DEFAULT ''"
         )
     conn.commit()
     return conn
 
 
-def already_scraped(
-    conn: sqlite3.Connection,
-    profile: str,
-    today: str,
-) -> bool:
+def already_scraped(conn: sqlite3.Connection, profile: str, today: str) -> bool:
+    """Check if a profile has already been scraped today."""
     row = conn.execute(
-        "SELECT 1 FROM scrape_log " "WHERE profile = ? AND scraped_on = ?",
+        "SELECT 1 FROM scrape_log WHERE profile = ? AND scraped_on = ?",
         (profile, today),
     ).fetchone()
     return row is not None
 
 
-def log_scrape(
-    conn: sqlite3.Connection,
-    profile: str,
-    today: str,
-) -> None:
+def log_scrape(conn: sqlite3.Connection, profile: str, today: str) -> None:
+    """Record that a profile was scraped on a given date."""
     conn.execute(
-        "INSERT OR IGNORE INTO scrape_log "
-        "(profile, scraped_on) VALUES (?, ?)",
+        "INSERT OR IGNORE INTO scrape_log (profile, scraped_on) VALUES (?, ?)",
         (profile, today),
     )
     conn.commit()
@@ -83,24 +78,17 @@ def upsert_papers(
     profile: str,
     today: str,
 ) -> None:
+    """Insert or update papers for a profile."""
     conn.executemany(
         """
-		INSERT OR REPLACE INTO papers
-		(doi, profile, title, abstract, authors,
-		 category, date, url, fetched_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		""",
+        INSERT OR REPLACE INTO papers
+        (doi, profile, title, abstract, authors, category, date, url, fetched_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
         [
             (
-                p.doi,
-                profile,
-                p.title,
-                p.abstract,
-                json.dumps(p.authors),
-                p.category,
-                p.date,
-                p.url,
-                today,
+                p.doi, profile, p.title, p.abstract,
+                json.dumps(p.authors), p.category, p.date, p.url, today,
             )
             for p in papers
         ],
@@ -108,15 +96,11 @@ def upsert_papers(
     conn.commit()
 
 
-def enforce_cap(
-    conn: sqlite3.Connection,
-    profile: str,
-    max_papers: int,
-) -> None:
+def enforce_cap(conn: sqlite3.Connection, profile: str, max_papers: int) -> None:
+    """Delete oldest papers beyond the per-profile cap."""
     rows = conn.execute(
         "SELECT doi FROM papers WHERE profile = ? "
-        "ORDER BY date DESC, fetched_at DESC "
-        "LIMIT ?",
+        "ORDER BY date DESC, fetched_at DESC LIMIT ?",
         (profile, max_papers),
     ).fetchall()
     if not rows:
@@ -127,22 +111,18 @@ def enforce_cap(
     ph = ",".join("?" * len(keep))
     args = (profile, *keep)
     conn.execute(
-        f"DELETE FROM results " f"WHERE profile = ? AND doi NOT IN ({ph})",
-        args,
+        f"DELETE FROM results WHERE profile = ? AND doi NOT IN ({ph})", args,
     )
     conn.execute(
-        f"DELETE FROM papers " f"WHERE profile = ? AND doi NOT IN ({ph})",
-        args,
+        f"DELETE FROM papers WHERE profile = ? AND doi NOT IN ({ph})", args,
     )
     conn.commit()
 
 
-def load_papers(
-    conn: sqlite3.Connection,
-    profile: str,
-) -> list[Paper]:
+def load_papers(conn: sqlite3.Connection, profile: str) -> list[Paper]:
+    """Load all papers for a profile, newest first."""
     rows = conn.execute(
-        "SELECT * FROM papers WHERE profile = ? " "ORDER BY date DESC",
+        "SELECT * FROM papers WHERE profile = ? ORDER BY date DESC",
         (profile,),
     ).fetchall()
     return [
@@ -169,15 +149,14 @@ def papers_needing_eval(
     profile: str,
     persona_names: list[str],
 ) -> list[Paper]:
+    """Return papers that haven't been evaluated by all personas yet."""
     if not persona_names or not papers:
         return []
     ph = ",".join("?" * len(persona_names))
     rows = conn.execute(
         f"SELECT doi FROM results "
-        f"WHERE profile = ? "
-        f"AND persona_name IN ({ph}) "
-        f"GROUP BY doi "
-        f"HAVING COUNT(DISTINCT persona_name) = ?",
+        f"WHERE profile = ? AND persona_name IN ({ph}) "
+        f"GROUP BY doi HAVING COUNT(DISTINCT persona_name) = ?",
         (profile, *persona_names, len(persona_names)),
     ).fetchall()
     done = {r["doi"] for r in rows}
@@ -190,23 +169,18 @@ def upsert_results(
     profile: str,
     persona_results: list[PersonaResult],
 ) -> None:
+    """Insert or update persona evaluation results."""
     now = datetime.utcnow().isoformat()
     conn.executemany(
         """
-		INSERT OR REPLACE INTO results
-		(doi, profile, persona_name, scores, summary,
-		 model, run_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		""",
+        INSERT OR REPLACE INTO results
+        (doi, profile, persona_name, scores, summary, model, run_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
         [
             (
-                doi,
-                profile,
-                r.persona_name,
-                json.dumps(r.scores),
-                r.summary,
-                r.model,
-                now,
+                doi, profile, r.persona_name,
+                json.dumps(r.scores), r.summary, r.model, now,
             )
             for r in persona_results
         ],
@@ -219,8 +193,9 @@ def load_results(
     doi: str,
     profile: str,
 ) -> dict[str, PersonaResult]:
+    """Load all persona results for a paper, keyed by persona name."""
     rows = conn.execute(
-        "SELECT * FROM results " "WHERE doi = ? AND profile = ?",
+        "SELECT * FROM results WHERE doi = ? AND profile = ?",
         (doi, profile),
     ).fetchall()
     return {

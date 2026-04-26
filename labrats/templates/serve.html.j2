@@ -1,0 +1,1624 @@
+{# labrats/templates/serve.html.j2 — unified UI #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>labrats</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+	font-family: system-ui, -apple-system, sans-serif;
+	background: #f8f8f8;
+	color: #1a1a1a;
+	line-height: 1.5;
+	height: 100vh;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.75rem 1.25rem;
+	border-bottom: 2px solid #1a1a1a;
+	background: #fff;
+	flex-shrink: 0;
+}
+.header-title {
+	font-size: 1.1rem;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+}
+.header-right {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+}
+.run-btn {
+	padding: 0.3rem 0.85rem;
+	background: #1a1a1a;
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 0.82rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+}
+.run-btn:hover { background: #333; }
+.run-btn:disabled {
+	background: #999;
+	cursor: not-allowed;
+}
+.run-status {
+	font-size: 0.75rem;
+	color: #999;
+}
+.run-status.active { color: #2e7d32; }
+.run-status.error { color: #c62828; }
+
+.layout {
+	display: flex;
+	flex: 1;
+	overflow: hidden;
+}
+
+/* ── sidebar ── */
+.sidebar {
+	width: 200px;
+	flex-shrink: 0;
+	background: #fff;
+	border-right: 1px solid #ddd;
+	overflow-y: auto;
+	padding: 0.5rem 0;
+	display: flex;
+	flex-direction: column;
+}
+.sidebar-main { flex: 1; }
+.sidebar-bottom {
+	border-top: 1px solid #ddd;
+	padding-top: 0.25rem;
+}
+.tab-btn {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	width: 100%;
+	padding: 0.55rem 1rem;
+	background: none;
+	border: none;
+	border-left: 3px solid transparent;
+	cursor: pointer;
+	font-size: 0.83rem;
+	color: #555;
+	text-align: left;
+	gap: 0.5rem;
+}
+.tab-btn:hover { background: #f4f4f4; }
+.tab-btn.active {
+	color: #1a1a1a;
+	font-weight: 600;
+	border-left-color: #1a1a1a;
+	background: #f8f8f8;
+}
+.tab-count {
+	font-size: 0.72rem;
+	color: #bbb;
+	font-weight: normal;
+	flex-shrink: 0;
+}
+.tab-btn.active .tab-count { color: #888; }
+
+/* ── main content ── */
+.content {
+	flex: 1;
+	overflow-y: auto;
+	padding: 1.25rem 1.5rem;
+}
+.view { display: none; max-width: 760px; }
+.view.active { display: block; }
+
+/* ── sort controls ── */
+.panel-controls {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 1rem;
+	font-size: 0.78rem;
+	color: #999;
+}
+.sort-btn {
+	padding: 0.18rem 0.55rem;
+	background: none;
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 0.76rem;
+	color: #666;
+}
+.sort-btn:hover { border-color: #999; color: #333; }
+.sort-btn.active {
+	background: #1a1a1a;
+	color: #fff;
+	border-color: #1a1a1a;
+}
+
+/* ── cards ── */
+.card {
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 6px;
+	padding: 1.25rem;
+	margin-bottom: 1rem;
+}
+.card.disabled { opacity: 0.55; }
+.card-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 1rem;
+	margin-bottom: 0.6rem;
+}
+.card-title { font-size: 1rem; font-weight: 600; }
+.card-title a { color: #1a1a1a; text-decoration: none; }
+.card-title a:hover { text-decoration: underline; }
+.card-meta {
+	font-size: 0.78rem;
+	color: #777;
+	margin-bottom: 0.5rem;
+}
+
+/* ── badges ── */
+.badges {
+	display: flex;
+	gap: 0.35rem;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+}
+.badge {
+	font-size: 0.73rem;
+	font-weight: 600;
+	padding: 0.15rem 0.45rem;
+	border-radius: 3px;
+	white-space: nowrap;
+}
+.badge-interest { background: #e8f5e9; color: #2e7d32; }
+.badge-tension  { background: #fff3e0; color: #e65100; }
+.badge-field { background: #e3f2fd; color: #1565c0; }
+.badge-model { background: #f3e5f5; color: #7b1fa2; }
+.badge-kw { background: #e8f5e9; color: #2e7d32; }
+.badge-cat { background: #fff3e0; color: #e65100; }
+.badge-arxiv { background: #fce4ec; color: #c62828; }
+
+/* ── tooltip ── */
+.tooltip-wrap { position: relative; cursor: help; }
+.tooltip-box {
+	display: none;
+	position: absolute;
+	top: calc(100% + 6px);
+	right: 0;
+	min-width: 230px;
+	background: #1e1e1e;
+	color: #e8e8e8;
+	font-size: 0.76rem;
+	font-weight: normal;
+	padding: 0.6rem 0.75rem;
+	border-radius: 5px;
+	line-height: 1.7;
+	z-index: 100;
+	pointer-events: none;
+}
+.tooltip-box .t-head {
+	font-weight: 700;
+	font-size: 0.82rem;
+	margin-bottom: 0.2rem;
+}
+.tooltip-box .t-formula { color: #aaa; margin-bottom: 0.35rem; }
+.tooltip-box .t-divider {
+	border: none;
+	border-top: 1px solid #3a3a3a;
+	margin: 0.35rem 0;
+}
+.tooltip-box .t-persona { color: #ccc; font-weight: 600; }
+.tooltip-box .t-scores { color: #aaa; padding-left: 0.5rem; }
+.tooltip-wrap:hover .tooltip-box { display: block; }
+
+/* ── abstract ── */
+.abstract {
+	font-size: 0.83rem;
+	color: #444;
+	line-height: 1.6;
+	margin-bottom: 0.9rem;
+	padding-left: 0.75rem;
+	border-left: 3px solid #ececec;
+}
+
+/* ── persona buttons ── */
+.persona-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	margin-top: 0.5rem;
+}
+.persona-btn {
+	padding: 0.18rem 0.6rem;
+	background: none;
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 0.75rem;
+	color: #555;
+}
+.persona-btn:hover { border-color: #888; color: #1a1a1a; }
+.persona-btn.active {
+	background: #1a1a1a;
+	color: #fff;
+	border-color: #1a1a1a;
+}
+
+/* ── persona detail panel ── */
+.persona-detail {
+	display: none;
+	margin-top: 0.6rem;
+	padding: 0.6rem 0.75rem;
+	background: #fafafa;
+	border: 1px solid #e8e8e8;
+	border-radius: 4px;
+}
+.persona-detail-scores {
+	font-size: 0.75rem;
+	color: #777;
+	margin-bottom: 0.3rem;
+}
+.persona-detail-model {
+	font-size: 0.7rem;
+	color: #bbb;
+	margin-top: 0.3rem;
+}
+.persona-detail-summary {
+	font-size: 0.83rem;
+	color: #222;
+	line-height: 1.55;
+}
+
+/* ── toggle switch ── */
+.toggle {
+	position: relative;
+	width: 36px;
+	height: 20px;
+	flex-shrink: 0;
+}
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+	position: absolute;
+	inset: 0;
+	background: #ccc;
+	border-radius: 20px;
+	cursor: pointer;
+	transition: background 0.2s;
+}
+.toggle-slider::before {
+	content: "";
+	position: absolute;
+	width: 14px;
+	height: 14px;
+	left: 3px;
+	bottom: 3px;
+	background: #fff;
+	border-radius: 50%;
+	transition: transform 0.2s;
+}
+.toggle input:checked + .toggle-slider { background: #1a1a1a; }
+.toggle input:checked + .toggle-slider::before {
+	transform: translateX(16px);
+}
+
+/* ── buttons ── */
+.btn {
+	padding: 0.3rem 0.75rem;
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 0.78rem;
+	background: none;
+	color: #555;
+}
+.btn:hover { border-color: #999; color: #333; }
+.btn-primary {
+	background: #1a1a1a;
+	color: #fff;
+	border-color: #1a1a1a;
+}
+.btn-primary:hover { background: #333; border-color: #333; }
+.btn-danger { color: #c62828; border-color: #e57373; }
+.btn-danger:hover { background: #ffebee; border-color: #c62828; }
+.btn-row { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+.add-btn { margin-bottom: 1rem; }
+
+/* ── edit form ── */
+.edit-form {
+	display: none;
+	margin-top: 0.75rem;
+	padding-top: 0.75rem;
+	border-top: 1px solid #eee;
+}
+.edit-form.open { display: block; }
+.form-group { margin-bottom: 0.6rem; }
+.form-group > label {
+	display: block;
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: #777;
+	margin-bottom: 0.15rem;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+.form-group input,
+.form-group textarea {
+	width: 100%;
+	padding: 0.4rem 0.55rem;
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	font-family: inherit;
+	font-size: 0.83rem;
+	color: #1a1a1a;
+	background: #fafafa;
+}
+.form-group input:focus,
+.form-group textarea:focus {
+	outline: none;
+	border-color: #999;
+	background: #fff;
+}
+.form-group textarea { min-height: 60px; resize: vertical; }
+.form-hint { font-size: 0.7rem; color: #aaa; margin-top: 0.1rem; }
+
+/* ── checkbox grids ── */
+.check-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+	gap: 1px;
+	background: #eee;
+	border: 1px solid #eee;
+	border-radius: 3px;
+	overflow: hidden;
+}
+.check-item {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-size: 0.72rem;
+	color: #888;
+	background: #fff;
+	padding: 0.25rem 0.45rem;
+	cursor: pointer;
+	user-select: none;
+}
+.check-item:hover { background: #f8f8f8; }
+.check-item:has(input:checked) {
+	color: #1a1a1a;
+	font-weight: 600;
+	background: #f4f7ff;
+}
+.check-item input {
+	accent-color: #1a1a1a;
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+}
+.check-all {
+	grid-column: 1 / -1;
+	font-weight: 600;
+	color: #555;
+	background: #fafafa;
+	border-bottom: 1px solid #ddd;
+}
+
+/* ── config sub-tabs ── */
+.config-tabs {
+	display: flex;
+	gap: 0;
+	margin-bottom: 1rem;
+	border-bottom: 1px solid #ddd;
+}
+.config-tab-btn {
+	padding: 0.45rem 1rem;
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	cursor: pointer;
+	font-size: 0.82rem;
+	color: #777;
+}
+.config-tab-btn:hover { color: #1a1a1a; }
+.config-tab-btn.active {
+	color: #1a1a1a;
+	font-weight: 600;
+	border-bottom-color: #1a1a1a;
+}
+.config-panel { display: none; }
+.config-panel.active { display: block; }
+
+/* ── empty state ── */
+.empty-state {
+	text-align: center;
+	padding: 4rem 1rem;
+	color: #999;
+}
+.empty-state h2 {
+	font-size: 1.1rem;
+	color: #555;
+	margin-bottom: 0.5rem;
+}
+
+/* ── toast ── */
+.toast {
+	position: fixed;
+	bottom: 1.5rem;
+	right: 1.5rem;
+	background: #1a1a1a;
+	color: #fff;
+	padding: 0.5rem 1rem;
+	border-radius: 4px;
+	font-size: 0.8rem;
+	opacity: 0;
+	transition: opacity 0.3s;
+	pointer-events: none;
+	z-index: 200;
+}
+.toast.show { opacity: 1; }
+
+/* ── progress bar ── */
+.progress-bar {
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 3px;
+	background: #2e7d32;
+	transition: width 0.3s;
+}
+</style>
+</head>
+<body>
+<header style="position:relative">
+  <div class="progress-bar" id="progress-bar" style="width:0"></div>
+  <span class="header-title">labrats</span>
+  <div class="header-right">
+    <span class="run-status" id="run-status"></span>
+    <button class="run-btn" id="run-btn" onclick="startRun()">
+      Run
+    </button>
+  </div>
+</header>
+<div class="layout">
+
+  <nav class="sidebar">
+    <div class="sidebar-main" id="digest-tabs"></div>
+    <div class="sidebar-bottom">
+      <button class="tab-btn" id="tab-config"
+              onclick="showConfig()">
+        <span>Settings</span>
+      </button>
+    </div>
+  </nav>
+
+  <main class="content">
+
+    <!-- ── Digest view ── -->
+    <div class="view active" id="digest-view">
+      <div id="digest-content"></div>
+    </div>
+
+    <!-- ── Config view ── -->
+    <div class="view" id="config-view">
+      <div class="config-tabs">
+        <button class="config-tab-btn active"
+                onclick="showConfigTab('personas')">
+          Personas</button>
+        <button class="config-tab-btn"
+                onclick="showConfigTab('profiles')">
+          Profiles</button>
+        <button class="config-tab-btn"
+                onclick="showConfigTab('settings')">
+          Settings</button>
+      </div>
+
+      <!-- personas -->
+      <div class="config-panel active" id="cpanel-personas">
+        <button class="btn btn-primary add-btn"
+                onclick="showNewPersona()">+ Add persona</button>
+        <div id="new-persona-form" class="card"
+             style="display:none">
+          <div class="card-title" style="margin-bottom:0.5rem">
+            New persona</div>
+          <div id="new-persona-fields"></div>
+        </div>
+        <div id="persona-list"></div>
+      </div>
+
+      <!-- profiles -->
+      <div class="config-panel" id="cpanel-profiles">
+        <button class="btn btn-primary add-btn"
+                onclick="showNewProfile()">+ Add profile</button>
+        <div id="new-profile-form" class="card"
+             style="display:none">
+          <div class="card-title" style="margin-bottom:0.5rem">
+            New profile</div>
+          <div id="new-profile-fields"></div>
+        </div>
+        <div id="profile-list"></div>
+      </div>
+
+      <!-- settings -->
+      <div class="config-panel" id="cpanel-settings">
+        <div class="card" style="margin-bottom:1rem">
+          <div class="card-title"
+               style="margin-bottom:0.75rem">
+            Default Model</div>
+          <p class="card-meta" style="margin-bottom:0.75rem">
+            Used when no profile-level or persona-level
+            override is set.</p>
+          <div id="default-model-field"></div>
+          <div class="btn-row">
+            <button class="btn btn-primary"
+                    onclick="saveDefaultModel()">Save</button>
+          </div>
+        </div>
+        <div class="card">
+          <details id="api-keys-details">
+            <summary style="cursor:pointer;font-size:1rem;
+              font-weight:600;padding:0.25rem 0;
+              user-select:none">API Keys</summary>
+            <p class="card-meta" style="margin:0.75rem 0">
+              Keys are stored in
+              <code>~/.config/labrats/settings.yaml</code>.
+              Environment variables are used as fallback.</p>
+            <div id="settings-fields"></div>
+            <div class="btn-row">
+              <button class="btn btn-primary"
+                      onclick="saveApiKeys()">Save</button>
+            </div>
+          </details>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ── state ── */
+var personas = [];
+var profiles = [];
+var settingsData = {};
+var modelsData = {};
+var digestProfiles = [];
+var digestData = {};
+var currentProfile = null;
+var currentView = "digest";
+var _dlCounter = 0;
+var _cardId = 0;
+
+/* ── helpers ── */
+function esc(s) {
+  if (s == null) return "";
+  var d = document.createElement("div");
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+function toast(msg) {
+  var el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  setTimeout(function() { el.classList.remove("show"); }, 1800);
+}
+
+function api(method, path, body) {
+  var opts = { method: method, headers: {} };
+  if (body !== undefined) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  return fetch(path, opts).then(function(r) { return r.json(); });
+}
+
+/* ── model datalist helpers ── */
+function activeModelOptions() {
+  var opts = [];
+  var cloud = (modelsData && modelsData.cloud) || {};
+  Object.keys(cloud).forEach(function(provider) {
+    var info = cloud[provider];
+    if (!info.active) return;
+    (info.models || []).forEach(function(m) { opts.push(m); });
+  });
+  var local = (modelsData && modelsData.local) || {};
+  Object.keys(local).forEach(function(label) {
+    (local[label] || []).forEach(function(m) { opts.push(m); });
+  });
+  return opts;
+}
+
+function modelInputHTML(cls, value) {
+  var id = "dl-" + (++_dlCounter);
+  var opts = activeModelOptions();
+  var html =
+    '<input type="text" class="' + cls + '" value="' +
+      esc(value) + '" list="' + id +
+      '" autocomplete="off">' +
+    '<datalist id="' + id + '">';
+  opts.forEach(function(m) {
+    html += '<option value="' + esc(m) + '">';
+  });
+  html += '</datalist>';
+  return html;
+}
+
+function checkboxesHTML(items, selected, valueFn, labelFn) {
+  var allChecked = items.every(function(item) {
+    var val = valueFn ? valueFn(item) : item;
+    return selected.indexOf(val) !== -1;
+  });
+  var html = '<label class="check-item check-all">' +
+    '<input type="checkbox"' +
+      (allChecked ? " checked" : "") +
+      ' onchange="toggleAll(this)">' +
+    'Select all</label>';
+  html += items.map(function(item) {
+    var val = valueFn ? valueFn(item) : item;
+    var lbl = labelFn ? labelFn(item) : item;
+    var checked = selected.indexOf(val) !== -1 ? " checked" : "";
+    return '<label class="check-item">' +
+      '<input type="checkbox" value="' + esc(val) +
+        '"' + checked + '>' + esc(lbl) + '</label>';
+  }).join("");
+  return html;
+}
+
+function toggleAll(masterCb) {
+  var grid = masterCb.closest(".check-grid");
+  var boxes = grid.querySelectorAll(
+    'input[type=checkbox]:not([onchange])');
+  boxes.forEach(function(cb) { cb.checked = masterCb.checked; });
+}
+
+function readChecked(container, selector) {
+  return Array.from(container.querySelectorAll(
+    selector + " input[type=checkbox]"
+  )).filter(function(cb) {
+    return cb.checked;
+  }).map(function(cb) { return cb.value; });
+}
+
+/* ── navigation ── */
+function showDigest(profileName) {
+  currentView = "digest";
+  currentProfile = profileName;
+  document.getElementById("digest-view").classList.add("active");
+  document.getElementById("config-view").classList.remove("active");
+  document.getElementById("tab-config").classList.remove("active");
+  // update sidebar
+  var btns = document.querySelectorAll(".digest-tab");
+  btns.forEach(function(b) {
+    b.classList.toggle("active", b.dataset.profile === profileName);
+  });
+  loadDigestCards(profileName);
+}
+
+function showConfig() {
+  currentView = "config";
+  document.getElementById("digest-view").classList.remove("active");
+  document.getElementById("config-view").classList.add("active");
+  document.getElementById("tab-config").classList.add("active");
+  var btns = document.querySelectorAll(".digest-tab");
+  btns.forEach(function(b) { b.classList.remove("active"); });
+}
+
+function showConfigTab(name) {
+  ["personas", "profiles", "settings"].forEach(function(t) {
+    var btn = document.querySelector(
+      '.config-tab-btn[onclick*="' + t + '"]');
+    var panel = document.getElementById("cpanel-" + t);
+    if (btn) btn.classList.toggle("active", t === name);
+    if (panel) panel.classList.toggle("active", t === name);
+  });
+}
+
+/* ── sidebar rendering ── */
+function renderSidebar() {
+  var html = digestProfiles.map(function(p) {
+    var cls = "tab-btn digest-tab" +
+      (p.name === currentProfile ? " active" : "");
+    return '<button class="' + cls + '" ' +
+      'data-profile="' + esc(p.name) + '" ' +
+      'onclick="showDigest(\'' + esc(p.name) + '\')">' +
+      '<span>' + esc(p.name) + '</span>' +
+      '<span class="tab-count">' + p.paper_count + '</span>' +
+      '</button>';
+  }).join("");
+  document.getElementById("digest-tabs").innerHTML = html;
+}
+
+/* ── digest card rendering ── */
+function loadDigestCards(profile) {
+  var cached = digestData[profile];
+  if (cached !== undefined) {
+    renderDigestCards(profile, cached);
+    return;
+  }
+  api("GET", "/api/digest/" + encodeURIComponent(profile))
+    .then(function(cards) {
+      digestData[profile] = cards;
+      renderDigestCards(profile, cards);
+    });
+}
+
+function renderDigestCards(profile, cards) {
+  if (!cards || !cards.length) {
+    document.getElementById("digest-content").innerHTML =
+      '<div class="empty-state">' +
+        '<h2>No papers yet</h2>' +
+        '<p>Click Run to fetch and analyze papers.</p>' +
+      '</div>';
+    return;
+  }
+
+  var html =
+    '<div class="panel-controls">' +
+      'Sort by ' +
+      '<button class="sort-btn active" ' +
+        'onclick="sortDigest(\'score\', this)">score</button>' +
+      '<button class="sort-btn" ' +
+        'onclick="sortDigest(\'date\', this)">date</button>' +
+    '</div>';
+
+  html += cards.map(function(card) {
+    return renderOneCard(card);
+  }).join("");
+
+  document.getElementById("digest-content").innerHTML = html;
+}
+
+function renderOneCard(card) {
+  var cid = ++_cardId;
+  var p = card.paper;
+  var results = card.results || [];
+
+  // compute avg for tooltip
+  var scoreTotal = 0, scoreCnt = 0;
+  results.forEach(function(r) {
+    Object.values(r.scores).forEach(function(v) {
+      scoreTotal += v; scoreCnt++;
+    });
+  });
+  var avg = scoreCnt > 0 ? scoreTotal / scoreCnt : 0;
+
+  // tooltip persona lines
+  var tooltipPersonas = results.map(function(r) {
+    var scores = Object.keys(r.scores).map(function(k) {
+      return esc(k) + ": " + r.scores[k].toFixed(0);
+    }).join(" &middot; ");
+    return '<div class="t-persona">' +
+      esc(r.persona_name) + '</div>' +
+      '<div class="t-scores">' + scores + '</div>';
+  }).join("");
+
+  var tensionBadge = card.tension > 1.0
+    ? '<span class="badge badge-tension">' +
+        'tension ' + card.tension.toFixed(1) + '</span>'
+    : "";
+
+  // persona buttons + panels
+  var personaBtns = results.map(function(r, i) {
+    return '<button class="persona-btn" ' +
+      'data-target="pd-' + cid + '-' + i + '" ' +
+      'onclick="togglePersona(this)">' +
+      esc(r.persona_name) + '</button>';
+  }).join("");
+
+  var personaPanels = results.map(function(r, i) {
+    var scores = Object.keys(r.scores).map(function(k) {
+      return esc(k) + ": " + r.scores[k].toFixed(0);
+    }).join(" &middot; ");
+    var model = r.model
+      ? '<div class="persona-detail-model">' +
+          esc(r.model) + '</div>'
+      : "";
+    return '<div class="persona-detail" ' +
+      'id="pd-' + cid + '-' + i + '">' +
+      '<div class="persona-detail-scores">' +
+        scores + '</div>' +
+      '<div class="persona-detail-summary">' +
+        esc(r.summary) + '</div>' +
+      model + '</div>';
+  }).join("");
+
+  var authors = (p.authors || []).join(", ");
+
+  return (
+    '<div class="card" ' +
+      'data-score="' + card.interestingness.toFixed(6) + '" ' +
+      'data-date="' + esc(p.date) + '">' +
+      '<div class="card-header">' +
+        '<div class="card-title">' +
+          '<a href="' + esc(p.url) + '" target="_blank">' +
+            esc(p.title) + '</a></div>' +
+        '<div class="badges">' +
+          '<span class="badge badge-interest tooltip-wrap">' +
+            card.interestingness.toFixed(1) +
+            '<span class="tooltip-box">' +
+              '<div class="t-head">Interestingness: ' +
+                card.interestingness.toFixed(2) + '</div>' +
+              '<div class="t-formula">' +
+                '0.6 &times; avg (' + avg.toFixed(2) +
+                ') + 0.4 &times; tension (' +
+                card.tension.toFixed(2) + ')</div>' +
+              (results.length
+                ? '<hr class="t-divider">' + tooltipPersonas
+                : "") +
+            '</span>' +
+          '</span>' +
+          tensionBadge +
+        '</div>' +
+      '</div>' +
+      '<div class="card-meta">' +
+        esc(authors) + ' &middot; ' +
+        esc(p.category) + ' &middot; ' +
+        esc(p.date) +
+      '</div>' +
+      '<p class="abstract">' + esc(p.abstract) + '</p>' +
+      (results.length
+        ? '<div class="persona-row">' + personaBtns + '</div>' +
+          personaPanels
+        : "") +
+    '</div>'
+  );
+}
+
+function togglePersona(btn) {
+  var id = btn.dataset.target;
+  var panel = document.getElementById(id);
+  var open = panel.style.display === "block";
+  panel.style.display = open ? "none" : "block";
+  btn.classList.toggle("active", !open);
+}
+
+function sortDigest(key, btn) {
+  var container = document.getElementById("digest-content");
+  var cards = Array.from(container.querySelectorAll(".card"));
+  if (key === "score") {
+    cards.sort(function(a, b) {
+      return parseFloat(b.dataset.score) -
+             parseFloat(a.dataset.score);
+    });
+  } else {
+    cards.sort(function(a, b) {
+      if (b.dataset.date > a.dataset.date) return 1;
+      if (b.dataset.date < a.dataset.date) return -1;
+      return 0;
+    });
+  }
+  cards.forEach(function(c) { container.appendChild(c); });
+  container.querySelectorAll(".sort-btn").forEach(function(b) {
+    b.classList.remove("active");
+  });
+  btn.classList.add("active");
+}
+
+/* ── run ── */
+function startRun() {
+  var btn = document.getElementById("run-btn");
+  btn.disabled = true;
+  btn.textContent = "Running...";
+  api("POST", "/api/run").then(function(res) {
+    if (res.error) {
+      toast(res.error);
+      btn.disabled = false;
+      btn.textContent = "Run";
+      return;
+    }
+    pollStatus();
+  });
+}
+
+function pollStatus() {
+  api("GET", "/api/run/status").then(function(s) {
+    var el = document.getElementById("run-status");
+    var bar = document.getElementById("progress-bar");
+    var btn = document.getElementById("run-btn");
+
+    if (s.status === "running") {
+      el.className = "run-status active";
+      var prog = s.progress || {};
+      var phase = s.phase || "";
+      var profile = s.profile || "";
+      var parts = [];
+      if (phase) parts.push(phase);
+      if (profile) parts.push(profile);
+      if (prog.total > 0) {
+        parts.push(prog.completed + "/" + prog.total);
+        var pct = (prog.completed / prog.total * 100);
+        bar.style.width = pct.toFixed(0) + "%";
+      }
+      el.textContent = parts.join(" — ");
+      setTimeout(pollStatus, 1500);
+
+    } else if (s.status === "done") {
+      el.className = "run-status active";
+      el.textContent = "Done";
+      bar.style.width = "100%";
+      btn.disabled = false;
+      btn.textContent = "Run";
+      setTimeout(function() {
+        bar.style.width = "0";
+        el.textContent = "";
+      }, 3000);
+      // refresh digest
+      digestData = {};
+      api("GET", "/api/digest").then(function(dp) {
+        digestProfiles = dp;
+        renderSidebar();
+        if (currentView === "digest" && currentProfile) {
+          loadDigestCards(currentProfile);
+        } else if (
+          currentView === "digest" && dp.length
+        ) {
+          showDigest(dp[0].name);
+        }
+      });
+
+    } else if (s.status === "error") {
+      el.className = "run-status error";
+      el.textContent = "Error: " + (s.error || "unknown");
+      bar.style.width = "0";
+      btn.disabled = false;
+      btn.textContent = "Run";
+
+    } else {
+      el.textContent = "";
+      bar.style.width = "0";
+      btn.disabled = false;
+      btn.textContent = "Run";
+    }
+  });
+}
+
+/* ══════════════════════════════════════════════
+   CONFIG JS (from config.html.j2, adapted)
+   ══════════════════════════════════════════════ */
+
+var BIORXIV_CATEGORIES = [
+  "animal behavior and cognition", "biochemistry",
+  "bioengineering", "bioinformatics", "biophysics",
+  "cancer biology", "cell biology", "clinical trials",
+  "developmental biology", "ecology", "epidemiology",
+  "evolutionary biology", "genetics", "genomics",
+  "immunology", "microbiology", "molecular biology",
+  "neuroscience", "paleontology", "pathology",
+  "pharmacology and toxicology", "physiology",
+  "plant biology",
+  "scientific communication and education",
+  "synthetic biology", "systems biology", "zoology"
+];
+
+var ARXIV_CATEGORIES = [
+  "astro-ph", "cond-mat", "cs.AI", "cs.CL", "cs.CV",
+  "cs.LG", "cs.RO", "eess.SP", "gr-qc", "hep-ex",
+  "hep-ph", "hep-th", "math.CO", "math.OC", "math.ST",
+  "nlin.CD", "physics.bio-ph", "physics.chem-ph",
+  "physics.med-ph", "q-bio.BM", "q-bio.CB", "q-bio.GN",
+  "q-bio.MN", "q-bio.NC", "q-bio.OT", "q-bio.PE",
+  "q-bio.QM", "q-bio.SC", "q-bio.TO", "q-fin.ST",
+  "stat.AP", "stat.ME", "stat.ML"
+];
+
+var PROVIDERS = [
+  { key: "openai", label: "OpenAI",
+    env: "OPENAI_API_KEY" },
+  { key: "anthropic", label: "Anthropic",
+    env: "ANTHROPIC_API_KEY" },
+  { key: "gemini", label: "Google / Gemini",
+    env: "GOOGLE_API_KEY" },
+  { key: "groq", label: "Groq",
+    env: "GROQ_API_KEY" },
+  { key: "mistral", label: "Mistral",
+    env: "MISTRAL_API_KEY" },
+  { key: "cohere", label: "Cohere",
+    env: "COHERE_API_KEY" },
+  { key: "together_ai", label: "Together AI",
+    env: "TOGETHERAI_API_KEY" },
+];
+
+/* ── persona rendering ── */
+function personaCardHTML(p) {
+  var cls = p.enabled ? "card" : "card disabled";
+  var fields = p.scored_fields.map(function(f) {
+    return '<span class="badge badge-field">' +
+      esc(f) + '</span>';
+  }).join("");
+  var model = p.model
+    ? '<span class="badge badge-model">' +
+        esc(p.model) + '</span>'
+    : "";
+  return (
+    '<div class="' + cls + '" id="pc-' + esc(p.stem) + '">' +
+      '<div class="card-header">' +
+        '<div class="card-title">' + esc(p.name) + '</div>' +
+        '<label class="toggle">' +
+          '<input type="checkbox"' +
+            (p.enabled ? " checked" : "") +
+            ' onchange="togglePersonaEnabled(\'' +
+              esc(p.stem) + '\')">' +
+          '<span class="toggle-slider"></span>' +
+        '</label>' +
+      '</div>' +
+      '<div class="card-meta">' +
+        esc(p.role.substring(0, 120)) +
+        (p.role.length > 120 ? "..." : "") +
+      '</div>' +
+      '<div class="badges">' + fields + model + '</div>' +
+      '<div class="btn-row">' +
+        '<button class="btn" onclick="toggleEdit(\'' +
+          esc(p.stem) + '\')">Edit</button>' +
+        '<button class="btn btn-danger" ' +
+          'onclick="deletePersona(\'' +
+          esc(p.stem) + '\')">Delete</button>' +
+      '</div>' +
+      '<div class="edit-form" id="ef-' + esc(p.stem) + '">' +
+        personaFormHTML(p, "update") +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function personaFormHTML(p, mode) {
+  var stem = p ? p.stem : "";
+  var name = p ? p.name : "";
+  var role = p ? p.role : "";
+  var prompt = p ? p.prompt :
+    "You are a {role}. Read the following paper and " +
+    "evaluate it.\nFor each scored field, provide a " +
+    "score from 1-10.\nGive a short, direct take " +
+    "(1-2 sentences).";
+  var fields = p ? p.scored_fields.join(", ") :
+    "methodological_rigor, novelty, relevance";
+  var model = p ? (p.model || "") : "";
+  var action = mode === "update"
+    ? "savePersona('" + esc(stem) + "')"
+    : "createPersona()";
+  var cancel = mode === "update"
+    ? "toggleEdit('" + esc(stem) + "')"
+    : "hideNewPersona()";
+  return (
+    '<div class="form-group">' +
+      '<label>Name</label>' +
+      '<input type="text" class="pf-name" value="' +
+        esc(name) + '">' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Role</label>' +
+      '<textarea class="pf-role">' +
+        esc(role) + '</textarea>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Prompt</label>' +
+      '<textarea class="pf-prompt" rows="3">' +
+        esc(prompt) + '</textarea>' +
+      '<div class="form-hint">Use {role} as placeholder</div>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Scored fields</label>' +
+      '<input type="text" class="pf-fields" value="' +
+        esc(fields) + '">' +
+      '<div class="form-hint">Comma-separated</div>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Model override</label>' +
+      modelInputHTML("pf-model", model) +
+      '<div class="form-hint">Leave blank for default</div>' +
+    '</div>' +
+    '<div class="btn-row">' +
+      '<button class="btn btn-primary" onclick="' +
+        action + '">Save</button>' +
+      '<button class="btn" onclick="' +
+        cancel + '">Cancel</button>' +
+    '</div>'
+  );
+}
+
+function renderPersonas() {
+  document.getElementById("persona-list").innerHTML =
+    personas.map(personaCardHTML).join("");
+}
+
+function readPersonaForm(container) {
+  return {
+    name: container.querySelector(".pf-name").value.trim(),
+    role: container.querySelector(".pf-role").value.trim(),
+    prompt: container.querySelector(".pf-prompt").value.trim(),
+    scored_fields: container.querySelector(".pf-fields")
+      .value.split(",").map(function(s) {
+        return s.trim();
+      }).filter(Boolean),
+    model: container.querySelector(".pf-model")
+      .value.trim() || null,
+    enabled: true,
+  };
+}
+
+function showNewPersona() {
+  var wrap = document.getElementById("new-persona-form");
+  wrap.style.display = "block";
+  document.getElementById("new-persona-fields").innerHTML =
+    personaFormHTML(null, "create");
+}
+function hideNewPersona() {
+  document.getElementById("new-persona-form")
+    .style.display = "none";
+}
+function createPersona() {
+  var container = document.getElementById("new-persona-fields");
+  var data = readPersonaForm(container);
+  if (!data.name) return toast("Name is required");
+  if (!data.scored_fields.length)
+    return toast("At least one scored field required");
+  api("POST", "/api/personas", data).then(function(res) {
+    personas = res;
+    renderPersonas();
+    renderProfiles();
+    hideNewPersona();
+    toast("Persona created");
+  });
+}
+function toggleEdit(stem) {
+  document.getElementById("ef-" + stem).classList.toggle("open");
+}
+function savePersona(stem) {
+  var container = document.getElementById("ef-" + stem);
+  var data = readPersonaForm(container);
+  var orig = personas.find(function(p) {
+    return p.stem === stem;
+  });
+  if (orig) data.enabled = orig.enabled;
+  if (!data.name) return toast("Name is required");
+  if (!data.scored_fields.length)
+    return toast("At least one scored field required");
+  api("PUT", "/api/personas/" + encodeURIComponent(stem),
+    data).then(function(res) {
+    personas = res;
+    renderPersonas();
+    renderProfiles();
+    toast("Persona saved");
+  });
+}
+function deletePersona(stem) {
+  if (!confirm("Delete this persona?")) return;
+  api("DELETE", "/api/personas/" + encodeURIComponent(stem))
+    .then(function(res) {
+      personas = res;
+      renderPersonas();
+      renderProfiles();
+      toast("Persona deleted");
+    });
+}
+function togglePersonaEnabled(stem) {
+  var p = personas.find(function(x) {
+    return x.stem === stem;
+  });
+  if (!p) return;
+  var data = Object.assign({}, p, { enabled: !p.enabled });
+  delete data.stem;
+  api("PUT", "/api/personas/" + encodeURIComponent(stem),
+    data).then(function(res) {
+    personas = res;
+    renderPersonas();
+    renderProfiles();
+    toast(data.enabled ? "Enabled" : "Disabled");
+  });
+}
+
+/* ── profile rendering ── */
+function profileCardHTML(prof, idx) {
+  var kws = (prof.keywords || []).map(function(k) {
+    return '<span class="badge badge-kw">' +
+      esc(k) + '</span>';
+  }).join("");
+  var cats = (prof.categories || []).map(function(c) {
+    return '<span class="badge badge-cat">' +
+      esc(c) + '</span>';
+  }).join("");
+  var arxiv = (prof.arxiv_categories || []).map(function(c) {
+    return '<span class="badge badge-arxiv">' +
+      esc(c) + '</span>';
+  }).join("");
+  var assigned = prof.personas || [];
+  var assignedText = assigned.length
+    ? assigned.length + " persona" +
+      (assigned.length > 1 ? "s" : "") + " assigned"
+    : "all personas";
+  var maxP = prof.max_papers || 500;
+  var profModel = prof.model
+    ? '<span class="badge badge-model">' +
+        esc(prof.model) + '</span>'
+    : "";
+  return (
+    '<div class="card" id="prc-' + idx + '">' +
+      '<div class="card-header">' +
+        '<div class="card-title">' +
+          esc(prof.name) + '</div>' +
+        '<span style="font-size:0.75rem;color:#999">' +
+          esc(assignedText) +
+          ' &middot; max ' + maxP +
+        '</span>' +
+      '</div>' +
+      '<div class="badges" style="margin-bottom:0.3rem">' +
+        profModel + kws + cats + arxiv +
+      '</div>' +
+      '<div class="btn-row">' +
+        '<button class="btn" onclick="toggleProfileEdit(' +
+          idx + ')">Edit</button>' +
+        '<button class="btn btn-danger" ' +
+          'onclick="deleteProfile(' + idx +
+          ')">Delete</button>' +
+      '</div>' +
+      '<div class="edit-form" id="pef-' + idx + '">' +
+        profileFormHTML(prof, idx, "update") +
+      '</div>' +
+    '</div>'
+  );
+}
+
+function profileFormHTML(prof, idx, mode) {
+  var name = prof ? prof.name : "";
+  var kws = prof ? (prof.keywords || []).join(", ") : "";
+  var selCats = prof ? (prof.categories || []) : [];
+  var selArxiv = prof ? (prof.arxiv_categories || []) : [];
+  var maxP = prof ? (prof.max_papers || 500) : 500;
+  var profMdl = prof ? (prof.model || "") : "";
+  var assigned = prof ? (prof.personas || []) : [];
+  var action = mode === "update"
+    ? "saveProfile(" + idx + ")"
+    : "createProfile()";
+  var cancel = mode === "update"
+    ? "toggleProfileEdit(" + idx + ")"
+    : "hideNewProfile()";
+
+  var catChecks = checkboxesHTML(BIORXIV_CATEGORIES, selCats);
+  var arxivChecks = checkboxesHTML(ARXIV_CATEGORIES, selArxiv);
+  var personaChecks = checkboxesHTML(
+    personas, assigned,
+    function(p) { return p.stem; },
+    function(p) { return p.name; });
+
+  return (
+    '<div class="form-group">' +
+      '<label>Name</label>' +
+      '<input type="text" class="pr-name" value="' +
+        esc(name) + '">' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Keywords</label>' +
+      '<input type="text" class="pr-kws" value="' +
+        esc(kws) + '">' +
+      '<div class="form-hint">Comma-separated</div>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Default model</label>' +
+      modelInputHTML("pr-model", profMdl) +
+      '<div class="form-hint">' +
+        'Leave blank for CLI default</div>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Categories (biorxiv)</label>' +
+      '<div class="check-grid pr-cats">' +
+        catChecks + '</div>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Categories (arxiv)</label>' +
+      '<div class="check-grid pr-arxiv">' +
+        arxivChecks + '</div>' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Max papers</label>' +
+      '<input type="number" class="pr-max" value="' +
+        maxP + '" min="1">' +
+    '</div>' +
+    '<div class="form-group">' +
+      '<label>Personas</label>' +
+      '<div class="check-grid pr-personas">' +
+        personaChecks + '</div>' +
+      '<div class="form-hint">' +
+        'Unchecking all = use all enabled personas</div>' +
+    '</div>' +
+    '<div class="btn-row">' +
+      '<button class="btn btn-primary" onclick="' +
+        action + '">Save</button>' +
+      '<button class="btn" onclick="' +
+        cancel + '">Cancel</button>' +
+    '</div>'
+  );
+}
+
+function renderProfiles() {
+  document.getElementById("profile-list").innerHTML =
+    profiles.map(profileCardHTML).join("");
+}
+
+function readProfileForm(container) {
+  var selected = readChecked(container, ".pr-personas");
+  var mdl = container.querySelector(".pr-model")
+    .value.trim();
+  var data = {
+    name: container.querySelector(".pr-name").value.trim(),
+    keywords: container.querySelector(".pr-kws")
+      .value.split(",").map(function(s) {
+        return s.trim();
+      }).filter(Boolean),
+    categories: readChecked(container, ".pr-cats"),
+    arxiv_categories: readChecked(container, ".pr-arxiv"),
+    max_papers: parseInt(
+      container.querySelector(".pr-max").value, 10) || 500,
+  };
+  if (mdl) data.model = mdl;
+  if (selected.length) data.personas = selected;
+  return data;
+}
+
+function showNewProfile() {
+  var wrap = document.getElementById("new-profile-form");
+  wrap.style.display = "block";
+  document.getElementById("new-profile-fields").innerHTML =
+    profileFormHTML(null, -1, "create");
+}
+function hideNewProfile() {
+  document.getElementById("new-profile-form")
+    .style.display = "none";
+}
+function createProfile() {
+  var container = document.getElementById("new-profile-fields");
+  var data = readProfileForm(container);
+  if (!data.name) return toast("Name is required");
+  if (!data.keywords.length && !data.categories.length)
+    return toast("Need at least one keyword or category");
+  api("POST", "/api/profiles", data).then(function(res) {
+    profiles = res;
+    renderProfiles();
+    hideNewProfile();
+    toast("Profile created");
+    // also refresh sidebar
+    api("GET", "/api/digest").then(function(dp) {
+      digestProfiles = dp;
+      renderSidebar();
+    });
+  });
+}
+function toggleProfileEdit(idx) {
+  document.getElementById("pef-" + idx).classList.toggle("open");
+}
+function saveProfile(idx) {
+  var container = document.getElementById("pef-" + idx);
+  var data = readProfileForm(container);
+  if (!data.name) return toast("Name is required");
+  api("PUT", "/api/profiles/" + idx, data).then(function(res) {
+    profiles = res;
+    renderProfiles();
+    toast("Profile saved");
+    api("GET", "/api/digest").then(function(dp) {
+      digestProfiles = dp;
+      renderSidebar();
+    });
+  });
+}
+function deleteProfile(idx) {
+  if (!confirm("Delete this profile?")) return;
+  api("DELETE", "/api/profiles/" + idx).then(function(res) {
+    profiles = res;
+    renderProfiles();
+    toast("Profile deleted");
+    api("GET", "/api/digest").then(function(dp) {
+      digestProfiles = dp;
+      renderSidebar();
+    });
+  });
+}
+
+/* ── settings rendering ── */
+function renderDefaultModel() {
+  var val = settingsData.default_model || "";
+  var html =
+    '<div class="form-group">' +
+      modelInputHTML("st-default-model", val) +
+    '</div>';
+
+  var local = (modelsData && modelsData.local) || {};
+  var labels = Object.keys(local);
+  var cloud = (modelsData && modelsData.cloud) || {};
+  var activeCloud = Object.keys(cloud).filter(function(p) {
+    return cloud[p].active;
+  });
+
+  if (labels.length || activeCloud.length) {
+    html += '<div style="margin-top:0.75rem;' +
+      'font-size:0.78rem;color:#555">' +
+      '<div style="font-weight:600;' +
+        'margin-bottom:0.35rem">' +
+        'Available models</div>';
+  }
+  labels.forEach(function(label) {
+    var models = local[label] || [];
+    html += '<div style="margin-bottom:0.5rem">' +
+      '<span style="color:#2e7d32;font-weight:600;' +
+        'font-size:0.75rem">' + esc(label) + '</span>' +
+      '<div style="display:flex;flex-wrap:wrap;' +
+        'gap:0.3rem;margin-top:0.25rem">';
+    models.forEach(function(m) {
+      html += '<span class="badge badge-model" ' +
+        'style="cursor:pointer" ' +
+        'onclick="pickModel(\'' + esc(m) + '\')">' +
+        esc(m) + '</span>';
+    });
+    html += '</div></div>';
+  });
+  activeCloud.forEach(function(provider) {
+    var info = cloud[provider];
+    var models = info.models || [];
+    var doc = info.docs || "";
+    var link = doc
+      ? ' <a href="' + esc(doc) + '" target="_blank" ' +
+          'style="font-size:0.7rem;color:#999;' +
+          'text-decoration:none">[all models]</a>'
+      : "";
+    html += '<details style="margin-bottom:0.5rem">' +
+      '<summary style="cursor:pointer;font-size:0.75rem;' +
+        'color:#2e7d32;font-weight:600">' +
+        esc(provider) +
+        ' <span style="font-weight:normal;color:#999">' +
+          '(' + models.length + ')</span>' +
+        link + '</summary>' +
+      '<div style="display:flex;flex-wrap:wrap;' +
+        'gap:0.3rem;margin-top:0.25rem;' +
+        'padding-left:0.5rem">';
+    models.forEach(function(m) {
+      html += '<span class="badge badge-model" ' +
+        'style="cursor:pointer" ' +
+        'onclick="pickModel(\'' + esc(m) + '\')">' +
+        esc(m) + '</span>';
+    });
+    html += '</div></details>';
+  });
+  if (labels.length || activeCloud.length) {
+    html += '</div>';
+  }
+  document.getElementById("default-model-field").innerHTML =
+    html;
+}
+
+function pickModel(name) {
+  var el = document.querySelector(".st-default-model");
+  if (el) el.value = name;
+}
+
+function renderSettings() {
+  renderDefaultModel();
+  var keys = settingsData.api_keys || {};
+  var html = PROVIDERS.map(function(p) {
+    var val = keys[p.key] || "";
+    var cloud = (modelsData && modelsData.cloud) || {};
+    var info = cloud[p.key] || {};
+    var active = info.active || false;
+    var dot = active
+      ? '<span style="color:#2e7d32;font-size:1.1em">' +
+          '&#9679;</span>'
+      : '<span style="color:#ccc;font-size:1.1em">' +
+          '&#9679;</span>';
+    var docs = info.docs || "";
+    var docsLink = docs
+      ? ' <a href="' + esc(docs) + '" target="_blank" ' +
+          'style="font-size:0.72rem;color:#999;' +
+          'text-decoration:none">[models]</a>'
+      : "";
+    return (
+      '<div class="form-group">' +
+        '<label>' + dot + ' ' + esc(p.label) +
+          docsLink +
+          ' <span style="font-weight:normal;color:#aaa">' +
+            '($' + p.env + ')</span></label>' +
+        '<div style="display:flex;gap:0.5rem;' +
+          'align-items:center">' +
+          '<input type="password" class="sk-' +
+            p.key + '" value="' + esc(val) + '" ' +
+            'style="flex:1;padding:0.4rem 0.55rem;' +
+            'border:1px solid #ddd;border-radius:3px;' +
+            'font-family:monospace;font-size:0.83rem;' +
+            'color:#1a1a1a;background:#fafafa">' +
+          '<button class="btn" onclick="toggleVis(this)"' +
+            ' style="flex-shrink:0">Show</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join("");
+  document.getElementById("settings-fields").innerHTML = html;
+}
+
+function toggleVis(btn) {
+  var input = btn.previousElementSibling;
+  if (input.type === "password") {
+    input.type = "text"; btn.textContent = "Hide";
+  } else {
+    input.type = "password"; btn.textContent = "Show";
+  }
+}
+
+function saveDefaultModel() {
+  var el = document.querySelector(".st-default-model");
+  var val = el ? el.value.trim() : "";
+  api("PUT", "/api/settings", { default_model: val })
+    .then(function() {
+      toast("Default model saved");
+      api("GET", "/api/settings").then(function(res) {
+        settingsData = res;
+        renderDefaultModel();
+      });
+    });
+}
+
+function saveApiKeys() {
+  var keys = {};
+  PROVIDERS.forEach(function(p) {
+    var el = document.querySelector(".sk-" + p.key);
+    if (el) keys[p.key] = el.value.trim();
+  });
+  api("PUT", "/api/settings", { api_keys: keys })
+    .then(function() {
+      toast("API keys saved");
+      Promise.all([
+        api("GET", "/api/settings"),
+        api("GET", "/api/models"),
+      ]).then(function(res) {
+        settingsData = res[0];
+        modelsData = res[1];
+        renderSettings();
+      });
+    });
+}
+
+/* ── init ── */
+function init() {
+  Promise.all([
+    api("GET", "/api/personas"),
+    api("GET", "/api/profiles"),
+    api("GET", "/api/settings"),
+    api("GET", "/api/models"),
+    api("GET", "/api/digest"),
+  ]).then(function(res) {
+    personas = res[0];
+    profiles = res[1];
+    settingsData = res[2];
+    modelsData = res[3];
+    digestProfiles = res[4];
+    renderPersonas();
+    renderProfiles();
+    renderSettings();
+    renderSidebar();
+    if (digestProfiles.length) {
+      showDigest(digestProfiles[0].name);
+    } else {
+      document.getElementById("digest-content").innerHTML =
+        '<div class="empty-state">' +
+          '<h2>Welcome to labrats</h2>' +
+          '<p>Configure your profiles in Settings, then ' +
+            'click Run.</p>' +
+        '</div>';
+    }
+  });
+}
+
+init();
+</script>
+</body>
+</html>

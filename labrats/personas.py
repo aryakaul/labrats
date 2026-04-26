@@ -1,3 +1,5 @@
+"""Load, save, and run LLM personas that evaluate papers."""
+
 import json
 import re
 from pathlib import Path
@@ -6,6 +8,7 @@ import yaml
 from litellm import acompletion
 
 from labrats.models import Paper, PersonaConfig, PersonaResult
+from labrats.models_registry import resolve_local_model
 
 
 def _slugify(name: str) -> str:
@@ -15,22 +18,26 @@ def _slugify(name: str) -> str:
     return s.strip("_")
 
 
+# ── settings (settings.yaml) ──
+
+
 def load_settings(config_dir: Path) -> dict:
-	path = config_dir / "settings.yaml"
-	if not path.exists():
-		return {"api_keys": {}}
-	with open(path) as f:
-		data = yaml.safe_load(f) or {}
-	return data
+    path = config_dir / "settings.yaml"
+    if not path.exists():
+        return {"api_keys": {}}
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+    return data
 
 
 def save_settings(config_dir: Path, data: dict) -> None:
-	path = config_dir / "settings.yaml"
-	with open(path, "w") as f:
-		yaml.safe_dump(
-			data, f, default_flow_style=False, sort_keys=False,
-		)
-	path.chmod(0o600)
+    path = config_dir / "settings.yaml"
+    with open(path, "w") as f:
+        yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+    path.chmod(0o600)  # keys are sensitive
+
+
+# ── profiles (topics.yaml) ──
 
 
 def load_profiles(config_dir: Path) -> list[dict]:
@@ -52,6 +59,9 @@ def save_profiles(config_dir: Path, profiles: list[dict]) -> None:
             default_flow_style=False,
             sort_keys=False,
         )
+
+
+# ── personas (personas/*.yaml) ──
 
 
 def load_personas(
@@ -83,11 +93,11 @@ def save_persona(
     persona: dict,
     stem: str | None = None,
 ) -> str:
-    """Write persona dict to YAML. Returns the stem."""
+    """Write persona dict to YAML. Returns the file stem."""
     persona_dir = config_dir / "personas"
     persona_dir.mkdir(parents=True, exist_ok=True)
     new_stem = _slugify(persona["name"])
-    # rename file if stem changed
+    # rename file if name changed
     if stem and stem != new_stem:
         old = persona_dir / f"{stem}.yaml"
         if old.exists():
@@ -119,6 +129,9 @@ def delete_persona(config_dir: Path, stem: str) -> None:
         path.unlink()
 
 
+# ── LLM evaluation ──
+
+
 def _build_messages(
     persona: PersonaConfig,
     paper: Paper,
@@ -146,6 +159,7 @@ async def run_persona(
     model: str,
     api_base: str | None = None,
 ) -> PersonaResult:
+    """Call the LLM as this persona and parse the scored JSON response."""
     effective_model = persona.model or model
     messages = _build_messages(persona, paper)
     kwargs: dict = {
@@ -154,15 +168,27 @@ async def run_persona(
         "response_format": {"type": "json_object"},
         "temperature": 0.3,
     }
+
+    # Auto-detect local models: if no provider prefix and no explicit
+    # api_base, probe known local endpoints (Ollama, LM Studio, etc.)
+    if api_base is None and "/" not in effective_model:
+        api_base = resolve_local_model(effective_model)
+
     if api_base is not None:
+        # litellm needs "openai/" prefix to route to OpenAI-compatible APIs
+        if "/" not in effective_model:
+            kwargs["model"] = f"openai/{effective_model}"
         kwargs["api_base"] = api_base
         kwargs["api_key"] = "sk-local"
+
     response = await acompletion(**kwargs)
     content = (response.choices[0].message.content or "").strip()
-    # strip markdown code fences emitted by some local models
+
+    # Strip markdown code fences emitted by some local models
     if content.startswith("```"):
         lines = content.splitlines()
         content = "\n".join(lines[1:-1]).strip()
+
     raw = json.loads(content)
     return PersonaResult(
         persona_name=persona.name,

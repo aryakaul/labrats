@@ -1,3 +1,5 @@
+"""Score and rank paper cards by tension and interestingness."""
+
 import statistics
 
 from labrats.models import PaperCard

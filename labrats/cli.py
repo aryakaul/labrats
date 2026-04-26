@@ -1,30 +1,19 @@
+"""CLI entry point — labrats init, serve, models, preview, test."""
+
 import asyncio
 import os
 import shutil
 from datetime import date, timedelta
 from pathlib import Path
 
+import requests
 import typer
 from rich import print as rprint
 
-from labrats.config_server import serve_config
-from labrats.db import (
-    already_scraped,
-    enforce_cap,
-    load_papers,
-    load_results,
-    log_scrape,
-    open_db,
-    papers_needing_eval,
-    upsert_papers,
-    upsert_results,
-)
-from labrats.digest import render_digest
-import requests
-
-from labrats.models import Paper, PaperCard, PersonaConfig
+from labrats.models import Paper, PersonaConfig
 from labrats.models_registry import (
     PROVIDER_DOCS,
+    PROVIDER_KEYS,
     discover_local,
     list_cloud_models,
     list_local_models,
@@ -32,22 +21,26 @@ from labrats.models_registry import (
 from labrats.personas import load_personas, load_profiles, load_settings
 from labrats.pipeline import run_pipeline
 from labrats.scraper import (
-    fetch_papers,
-    fetch_papers_arxiv,
+    fetch_from_sources,
     filter_by_topics,
+    union_arxiv_cats,
 )
 from labrats.synthesis import score_cards
 
 app = typer.Typer()
 
 PACKAGE_DIR = Path(__file__).resolve().parent
-TEMPLATE_DIR = PACKAGE_DIR / "templates"
 BUNDLED_DEFAULTS = PACKAGE_DIR / "defaults"
 
-_CFG_HELP = "Config directory " "(default: $XDG_CONFIG_HOME/labrats)"
+_CFG_HELP = "Config directory (default: $XDG_CONFIG_HOME/labrats)"
 _SRC_HELP = "Data source: biorxiv, arxiv, all"
-_API_HELP = "Local API base URL, e.g. " "http://localhost:2276/v1"
-_DB_HELP = "SQLite DB path " "(default: $XDG_DATA_HOME/labrats/labrats.db)"
+_API_HELP = "Local API base URL, e.g. http://localhost:2276/v1"
+_DB_HELP = "SQLite DB path (default: $XDG_DATA_HOME/labrats/labrats.db)"
+_MDL_HELP = "Default LLM model (overrides settings.yaml)"
+_FALLBACK_MODEL = "openai/gpt-4o-mini"
+
+
+# ── path helpers ──
 
 
 def _config_dir() -> Path:
@@ -73,162 +66,114 @@ def _require_config(config_dir: Path) -> None:
         raise typer.Exit(1)
 
 
-def _dedup(papers: list[Paper]) -> list[Paper]:
-    seen: set[str] = set()
-    result = []
-    for p in papers:
-        if p.doi not in seen:
-            seen.add(p.doi)
-            result.append(p)
-    return result
+def _resolve_model(cli_model: str | None, config_dir: Path) -> str:
+    """CLI flag > settings.yaml > fallback."""
+    if cli_model:
+        return cli_model
+    settings = load_settings(config_dir)
+    cfg_model = settings.get("default_model", "")
+    return cfg_model or _FALLBACK_MODEL
 
 
-_PROVIDER_KEYS = {
-	"openai": "OPENAI_API_KEY",
-	"anthropic": "ANTHROPIC_API_KEY",
-	"gemini": "GOOGLE_API_KEY",
-	"google": "GOOGLE_API_KEY",
-	"groq": "GROQ_API_KEY",
-	"together_ai": "TOGETHERAI_API_KEY",
-	"mistral": "MISTRAL_API_KEY",
-	"cohere": "COHERE_API_KEY",
-}
+# ── preflight model/key checks ──
 
 
 def _bare_model(model: str) -> str:
-	"""Strip provider prefix: 'openai/gpt-4o' -> 'gpt-4o'."""
-	return model.split("/", 1)[-1]
+    """'openai/gpt-4o' -> 'gpt-4o'"""
+    return model.split("/", 1)[-1]
 
 
 def _collect_models(
-	default: str,
-	personas: list[PersonaConfig],
-	profiles: list[dict] | None = None,
+    default: str,
+    personas: list[PersonaConfig],
+    profiles: list[dict] | None = None,
 ) -> list[str]:
-	models = {default}
-	if profiles:
-		for p in profiles:
-			if p.get("model"):
-				models.add(p["model"])
-	for p in personas:
-		if p.model:
-			models.add(p.model)
-	return list(models)
+    """Gather every distinct model that will be used in a run."""
+    models = {default}
+    if profiles:
+        for p in profiles:
+            if p.get("model"):
+                models.add(p["model"])
+    for p in personas:
+        if p.model:
+            models.add(p.model)
+    return list(models)
 
 
 def _preflight_check(
-	model: str,
-	personas: list[PersonaConfig],
-	api_base: str | None,
-	config_dir: Path,
-	profiles: list[dict] | None = None,
+    model: str,
+    personas: list[PersonaConfig],
+    api_base: str | None,
+    config_dir: Path,
+    profiles: list[dict] | None = None,
 ) -> None:
-	models = _collect_models(model, personas, profiles)
-	settings = load_settings(config_dir)
-	api_keys = settings.get("api_keys", {})
+    """Verify all models are reachable before starting a run."""
+    models = _collect_models(model, personas, profiles)
+    settings = load_settings(config_dir)
+    api_keys = settings.get("api_keys", {})
 
-	if api_base:
-		# local endpoint — check model availability
-		try:
-			resp = requests.get(
-				f"{api_base}/models", timeout=5,
-			)
-			resp.raise_for_status()
-			data = resp.json()
-			available = {
-				m["id"] for m in data.get("data", [])
-			}
-		except Exception as e:
-			rprint(
-				f"[red]Cannot reach local endpoint: "
-				f"{api_base}/models[/red]\n  {e}"
-			)
-			raise typer.Exit(1)
-
-		for m in models:
-			bare = _bare_model(m)
-			if bare not in available:
-				avail_str = "\n  ".join(sorted(available))
-				rprint(
-					f"[red]Model not available: "
-					f"{bare}[/red]\n"
-					f"Available models:\n  {avail_str}"
-				)
-				raise typer.Exit(1)
-		return
-
-	# cloud — check API keys
-	cfg_path = config_dir / "settings.yaml"
-	missing = []
-	for m in models:
-		provider = m.split("/", 1)[0]
-		env_var = _PROVIDER_KEYS.get(provider)
-		if not env_var:
-			continue
-		cfg_key = api_keys.get(provider, "")
-		if cfg_key:
-			os.environ[env_var] = cfg_key
-		elif not os.environ.get(env_var):
-			missing.append((m, provider, env_var))
-
-	if missing:
-		lines = "\n  ".join(
-			f"{m} -> ${var}"
-			for m, _, var in missing
-		)
-		rprint(
-			f"[red]Missing API keys:[/red]\n  {lines}\n"
-			f"\nSet via {cfg_path} or environment variable."
-			f"\nRun [bold]labrats config[/bold] to manage "
-			f"keys in the browser."
-		)
-		raise typer.Exit(1)
-
-
-def _fetch_from_sources(
-    start: str,
-    end: str,
-    source: str,
-    topics: dict,
-) -> list[Paper]:
-    papers: list[Paper] = []
-    errors: list[str] = []
-
-    if source in ("biorxiv", "all"):
+    if api_base:
+        # Local endpoint — verify the model is loaded
         try:
-            papers += fetch_papers(start, end)
+            resp = requests.get(f"{api_base}/models", timeout=5)
+            resp.raise_for_status()
+            available = {m["id"] for m in resp.json().get("data", [])}
         except Exception as e:
-            errors.append(f"biorxiv: {e}")
+            rprint(f"[red]Cannot reach {api_base}/models[/red]\n  {e}")
+            raise typer.Exit(1)
+        for m in models:
+            bare = _bare_model(m)
+            if bare not in available:
+                avail_str = "\n  ".join(sorted(available))
+                rprint(
+                    f"[red]Model not available: {bare}[/red]\n"
+                    f"Available models:\n  {avail_str}"
+                )
+                raise typer.Exit(1)
+        return
 
-    if source in ("arxiv", "all"):
-        try:
-            cats = topics.get("arxiv_categories", [])
-            papers += fetch_papers_arxiv(start, end, cats)
-        except Exception as e:
-            errors.append(f"arxiv: {e}")
+    # Cloud — verify API keys are set
+    cfg_path = config_dir / "settings.yaml"
+    missing = []
+    for m in models:
+        provider = m.split("/", 1)[0]
+        env_var = PROVIDER_KEYS.get(provider)
+        if not env_var:
+            continue
+        cfg_key = api_keys.get(provider, "")
+        if cfg_key:
+            os.environ[env_var] = cfg_key
+        elif not os.environ.get(env_var):
+            missing.append((m, provider, env_var))
 
+    if missing:
+        lines = "\n  ".join(f"{m} -> ${var}" for m, _, var in missing)
+        rprint(
+            f"[red]Missing API keys:[/red]\n  {lines}\n"
+            f"\nSet via {cfg_path} or environment variable."
+            f"\nRun [bold]labrats serve[/bold] to manage keys in the browser."
+        )
+        raise typer.Exit(1)
+
+
+def _fetch_and_warn(start, end, source, topics):
+    """Wrapper around fetch_from_sources that prints warnings via Rich."""
+    papers, errors = fetch_from_sources(start, end, source, topics)
     for err in errors:
         rprint(f"[yellow]Warning — {err}[/yellow]")
-
     if not papers and errors:
         rprint("[red]All sources failed.[/red]")
         raise typer.Exit(1)
+    return papers
 
-    return _dedup(papers)
 
-
-def _union_arxiv_cats(profiles: list[dict]) -> list[str]:
-    return list({c for p in profiles for c in p.get("arxiv_categories", [])})
+# ── commands ──
 
 
 @app.command()
 def init(
     config_dir: Path = typer.Option(None, help=_CFG_HELP),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        help="Overwrite existing files",
-    ),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing files"),
 ):
     """Seed config dir with bundled defaults."""
     target = config_dir or _config_dir()
@@ -253,7 +198,7 @@ def init(
     for f in copied:
         rprint(f"  [green]created[/green]  {f}")
     for f in skipped:
-        rprint(f"  [yellow]skipped[/yellow]  {f}" "  (--force to overwrite)")
+        rprint(f"  [yellow]skipped[/yellow]  {f}  (--force to overwrite)")
     rprint(f"\nConfig dir: {target}")
 
 
@@ -262,22 +207,18 @@ def models(
     config_dir: Path = typer.Option(None, help=_CFG_HELP),
     api_base: str = typer.Option(None, help=_API_HELP),
 ):
-    """List available LLM models."""
+    """List available LLM models (cloud + local)."""
     cfg = config_dir or _config_dir()
     settings = load_settings(cfg)
     api_keys = settings.get("api_keys", {})
     extra = settings.get("local_endpoints", [])
 
-    # ── local models ──
+    # Explicit endpoint — just show that one
     if api_base:
-        # explicit endpoint — just show that one
         try:
             local = list_local_models(api_base)
         except Exception as e:
-            rprint(
-                f"[red]Cannot reach {api_base}:"
-                f"[/red] {e}"
-            )
+            rprint(f"[red]Cannot reach {api_base}:[/red] {e}")
             raise typer.Exit(1)
         rprint(f"[bold]Local ({api_base}):[/bold]")
         for m in local:
@@ -286,7 +227,7 @@ def models(
             rprint("  (none loaded)")
         return
 
-    # auto-discover local endpoints
+    # Auto-discover local endpoints
     local_results = discover_local(extra)
     if local_results:
         rprint("[bold]Local models:[/bold]")
@@ -295,30 +236,21 @@ def models(
             for m in ms:
                 rprint(f"    {m}")
 
-    # ── cloud models ──
+    # Cloud models grouped by provider
     cloud = list_cloud_models()
-    active = []
-    inactive = []
+    active, inactive = [], []
     for provider in sorted(cloud.keys()):
         cfg_key = api_keys.get(provider, "")
-        env_var = _PROVIDER_KEYS.get(provider, "")
-        has_key = bool(cfg_key) or bool(
-            os.environ.get(env_var)
-        )
-        if has_key:
-            active.append(provider)
-        else:
-            inactive.append(provider)
+        env_var = PROVIDER_KEYS.get(provider, "")
+        has_key = bool(cfg_key) or bool(os.environ.get(env_var))
+        (active if has_key else inactive).append(provider)
 
     if active:
         rprint("\n[bold]Cloud providers:[/bold]")
         for p in active:
             ms = cloud.get(p, [])
             doc = PROVIDER_DOCS.get(p, "")
-            rprint(
-                f"\n  [green]{p}[/green] "
-                f"({len(ms)} models)"
-            )
+            rprint(f"\n  [green]{p}[/green] ({len(ms)} models)")
             if doc:
                 rprint(f"  {doc}")
             for m in ms:
@@ -327,8 +259,7 @@ def models(
         rprint("[yellow]No active providers.[/yellow]")
         rprint(
             "Configure API keys via "
-            "[bold]labrats config[/bold] or "
-            "settings.yaml."
+            "[bold]labrats serve[/bold] or settings.yaml."
         )
 
     if inactive:
@@ -340,154 +271,41 @@ def models(
 
 
 @app.command()
-def config(
+def serve(
     config_dir: Path = typer.Option(None, help=_CFG_HELP),
-    port: int = typer.Option(
-        8484,
-        help="Port for config server",
-    ),
-):
-    """Open the config UI in your browser."""
-    cfg = config_dir or _config_dir()
-    _require_config(cfg)
-    serve_config(cfg, port)
-
-
-@app.command()
-def run(
-    start: str = typer.Option(
-        None,
-        help="Start date (YYYY-MM-DD), default yesterday",
-    ),
-    end: str = typer.Option(
-        None,
-        help="End date (YYYY-MM-DD), default today",
-    ),
-    model: str = typer.Option(
-        "openai/gpt-4o-mini",
-        help="Default LLM model",
-    ),
-    source: str = typer.Option("all", help=_SRC_HELP),
-    config_dir: Path = typer.Option(None, help=_CFG_HELP),
-    output_dir: Path = typer.Option(
-        None,
-        help="Output directory (default: ./output)",
-    ),
-    api_base: str = typer.Option(None, help=_API_HELP),
+    port: int = typer.Option(8485, help="Port for the web server"),
     db_path: Path = typer.Option(None, help=_DB_HELP),
+    model: str = typer.Option(None, help=_MDL_HELP),
+    api_base: str = typer.Option(None, help=_API_HELP),
+    source: str = typer.Option("all", help=_SRC_HELP),
 ):
-    """Fetch, filter, evaluate, and render a digest."""
+    """Launch the unified web UI (digest + config + run)."""
+    from labrats.serve import serve as _serve
+
     cfg = config_dir or _config_dir()
     _require_config(cfg)
-    out = output_dir or Path.cwd() / "output"
+    mdl = _resolve_model(model, cfg)
     db = db_path or _db_path()
-
-    today = str(date.today())
-    today_dt = date.today()
-    start = start or str(today_dt - timedelta(days=1))
-    end = end or today
-
-    profiles = load_profiles(cfg)
-
-    # preflight: verify model access before any work
-    all_personas = []
-    for p in profiles:
-        pnames = p.get("personas")
-        all_personas += [
-            x for x in load_personas(cfg, pnames) if x.enabled
-        ]
-    _preflight_check(model, all_personas, api_base, cfg, profiles)
-
-    conn = open_db(db)
-
-    # scrape only profiles not yet fetched today
-    needs_scrape = [
-        p for p in profiles if not already_scraped(conn, p["name"], today)
-    ]
-
-    if needs_scrape:
-        fetch_topics = {"arxiv_categories": _union_arxiv_cats(needs_scrape)}
-        rprint(f"Fetching \\[{source}]: {start} to {end}")
-        all_papers = _fetch_from_sources(start, end, source, fetch_topics)
-        rprint(f"Found {len(all_papers)} papers")
-
-        for profile in needs_scrape:
-            pname = profile["name"]
-            cap = profile.get("max_papers", 500)
-            filtered = filter_by_topics(all_papers, profile)
-            upsert_papers(conn, filtered, pname, today)
-            enforce_cap(conn, pname, cap)
-            log_scrape(conn, pname, today)
-            rprint(f"{pname}: " f"saved {len(filtered)} papers")
-    else:
-        rprint("[dim]All profiles already scraped " "today — using DB[/dim]")
-
-    sections = []
-    for profile in profiles:
-        pname = profile["name"]
-        pnames = profile.get("personas")
-        personas = [p for p in load_personas(cfg, pnames) if p.enabled]
-        if not personas:
-            rprint(f"[yellow]{pname}: no personas, " f"skipping[/yellow]")
-            continue
-
-        db_papers = load_papers(conn, pname)
-        if not db_papers:
-            rprint(f"[yellow]{pname}: no papers in " f"DB[/yellow]")
-            continue
-
-        persona_names = [p.name for p in personas]
-        effective_model = profile.get("model") or model
-        to_eval = papers_needing_eval(conn, db_papers, pname, persona_names)
-        if to_eval:
-            rprint(f"{pname}: evaluating " f"{len(to_eval)} papers")
-            new_cards = asyncio.run(
-                run_pipeline(
-                    to_eval, personas, effective_model, api_base,
-                )
-            )
-            for card in new_cards:
-                upsert_results(conn, card.paper.doi, pname, card.results)
-
-        cards: list[PaperCard] = []
-        for paper in db_papers:
-            res_map = load_results(conn, paper.doi, pname)
-            results = [res_map[n] for n in persona_names if n in res_map]
-            if results:
-                cards.append(PaperCard(paper=paper, results=results))
-
-        cards = score_cards(cards)
-        sections.append((pname, cards))
-
-    conn.close()
-
-    if not sections:
-        rprint("[yellow]No results. Done.[/yellow]")
-        raise typer.Exit()
-
-    result = render_digest(sections, TEMPLATE_DIR, out)
-    rprint(f"[green]Digest: {result}[/green]")
+    _serve(cfg, port, db, mdl, api_base, source)
 
 
 @app.command()
 def preview(
-    model: str = typer.Option(
-        "openai/gpt-4o-mini",
-        help="Default LLM model",
-    ),
+    model: str = typer.Option(None, help=_MDL_HELP),
     source: str = typer.Option("all", help=_SRC_HELP),
     config_dir: Path = typer.Option(None, help=_CFG_HELP),
 ):
     """Show what would run without calling any LLM."""
     cfg = config_dir or _config_dir()
     _require_config(cfg)
+    model = _resolve_model(model, cfg)
     profiles = load_profiles(cfg)
-    fetch_topics = {"arxiv_categories": _union_arxiv_cats(profiles)}
+    fetch_topics = {"arxiv_categories": union_arxiv_cats(profiles)}
     today = date.today()
     start = str(today - timedelta(days=1))
     end = str(today)
 
-    papers = _fetch_from_sources(start, end, source, fetch_topics)
+    papers = _fetch_and_warn(start, end, source, fetch_topics)
     rprint(f"Papers fetched: {len(papers)}\n")
 
     for profile in profiles:
@@ -496,7 +314,7 @@ def preview(
         pnames = profile.get("personas")
         personas = [p for p in load_personas(cfg, pnames) if p.enabled]
         rprint(f"[bold]{pname}[/bold]")
-        rprint(f"  {len(filtered)} papers  " f"· {len(personas)} personas")
+        rprint(f"  {len(filtered)} papers  · {len(personas)} personas")
         for p in personas:
             m = p.model or model
             rprint(f"    - {p.name} ({m})")
@@ -507,35 +325,32 @@ def preview(
 
 @app.command()
 def test(
-    model: str = typer.Option(
-        "openai/gpt-4o-mini",
-        help="Default LLM model",
-    ),
+    model: str = typer.Option(None, help=_MDL_HELP),
     source: str = typer.Option("all", help=_SRC_HELP),
     config_dir: Path = typer.Option(None, help=_CFG_HELP),
     api_base: str = typer.Option(None, help=_API_HELP),
 ):
-    """Run the full pipeline on a single paper."""
+    """Run the full pipeline on a single paper (smoke test)."""
     cfg = config_dir or _config_dir()
     _require_config(cfg)
+    model = _resolve_model(model, cfg)
     profiles = load_profiles(cfg)
 
-    # preflight: verify model access before scraping
+    # Preflight: verify model access before scraping
     all_personas = []
     for p in profiles:
         pnames = p.get("personas")
-        all_personas += [
-            x for x in load_personas(cfg, pnames) if x.enabled
-        ]
+        all_personas += [x for x in load_personas(cfg, pnames) if x.enabled]
     _preflight_check(model, all_personas, api_base, cfg, profiles)
 
-    fetch_topics = {"arxiv_categories": _union_arxiv_cats(profiles)}
+    fetch_topics = {"arxiv_categories": union_arxiv_cats(profiles)}
     today = date.today()
     start = str(today - timedelta(days=1))
     end = str(today)
 
-    papers = _fetch_from_sources(start, end, source, fetch_topics)
+    papers = _fetch_and_warn(start, end, source, fetch_topics)
 
+    # Find first profile with matching papers
     matched_profile = None
     matched_papers: list[Paper] = []
     for profile in profiles:

@@ -1,4 +1,8 @@
 # labrats settings
+# Default model for persona evaluation.
+# Profile-level and persona-level overrides take precedence.
+default_model: ""
+
 # API keys for cloud LLM providers.
 # Environment variables (e.g. OPENAI_API_KEY) are used as fallback.
 api_keys:

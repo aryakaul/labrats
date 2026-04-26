@@ -1,9 +1,10 @@
+"""Fetch preprints from biorxiv and arxiv, with topic filtering."""
+
 import xml.etree.ElementTree as ET
 
 import requests
 
 from labrats.models import Paper
-
 
 BIORXIV_API = "https://api.biorxiv.org/details/biorxiv"
 ARXIV_API = "https://export.arxiv.org/api/query"
@@ -176,3 +177,55 @@ def _matches_topics(
         return True
     text = f"{paper.title} {paper.abstract}".lower()
     return any(kw in text for kw in keywords)
+
+
+# ── helpers used by both cli.py and serve.py ──
+
+
+def dedup_papers(papers: list[Paper]) -> list[Paper]:
+    """Remove duplicate papers by DOI."""
+    seen: set[str] = set()
+    result = []
+    for p in papers:
+        if p.doi not in seen:
+            seen.add(p.doi)
+            result.append(p)
+    return result
+
+
+def union_arxiv_cats(profiles: list[dict]) -> list[str]:
+    """Collect unique arxiv categories across all profiles."""
+    return list({c for p in profiles for c in p.get("arxiv_categories", [])})
+
+
+def fetch_from_sources(
+    start: str,
+    end: str,
+    source: str,
+    topics: dict,
+) -> list[Paper]:
+    """Fetch from biorxiv and/or arxiv, dedup, and return papers.
+
+    Raises RuntimeError if all requested sources fail.
+    Returns partial results if at least one source succeeds.
+    """
+    papers: list[Paper] = []
+    errors: list[str] = []
+
+    if source in ("biorxiv", "all"):
+        try:
+            papers += fetch_papers(start, end)
+        except Exception as e:
+            errors.append(f"biorxiv: {e}")
+
+    if source in ("arxiv", "all"):
+        try:
+            cats = topics.get("arxiv_categories", [])
+            papers += fetch_papers_arxiv(start, end, cats)
+        except Exception as e:
+            errors.append(f"arxiv: {e}")
+
+    if not papers and errors:
+        raise RuntimeError("All sources failed: " + "; ".join(errors))
+
+    return dedup_papers(papers), errors
