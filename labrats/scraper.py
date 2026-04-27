@@ -173,10 +173,15 @@ def _matches_topics(
     keywords: list[str],
     categories: list[str],
 ) -> bool:
-    if categories and paper.category.lower() in categories:
-        return True
-    text = f"{paper.title} {paper.abstract}".lower()
-    return any(kw in text for kw in keywords)
+    in_category = (
+        not categories or paper.category.lower() in categories
+    )
+    has_keyword = (
+        not keywords
+        or any(kw in f"{paper.title} {paper.abstract}".lower()
+               for kw in keywords)
+    )
+    return in_category and has_keyword
 
 
 # ── helpers used by both cli.py and serve.py ──

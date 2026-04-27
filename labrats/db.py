@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS scrape_log (
     scraped_on TEXT NOT NULL,
     PRIMARY KEY (profile, scraped_on)
 );
+CREATE TABLE IF NOT EXISTS summaries (
+    doi         TEXT NOT NULL PRIMARY KEY,
+    llm_summary TEXT NOT NULL DEFAULT ''
+);
 """
 
 
@@ -217,3 +221,36 @@ def load_results(
         )
         for r in rows
     }
+
+
+def load_llm_summary(conn: sqlite3.Connection, doi: str) -> str:
+    """Return the cached LLM-structured summary for a DOI, or empty string."""
+    row = conn.execute(
+        "SELECT llm_summary FROM summaries WHERE doi = ?", (doi,),
+    ).fetchone()
+    return row[0] if row else ""
+
+
+def upsert_llm_summary(
+    conn: sqlite3.Connection,
+    doi: str,
+    summary: str,
+) -> None:
+    """Store an LLM-structured summary for a DOI."""
+    conn.execute(
+        "INSERT OR REPLACE INTO summaries (doi, llm_summary) VALUES (?, ?)",
+        (doi, summary),
+    )
+    conn.commit()
+
+
+def papers_needing_summary(
+    conn: sqlite3.Connection,
+    papers: list,
+) -> list:
+    """Return papers that have no cached LLM summary yet."""
+    if not papers:
+        return []
+    rows = conn.execute("SELECT doi FROM summaries").fetchall()
+    done = {r[0] for r in rows}
+    return [p for p in papers if p.doi not in done]

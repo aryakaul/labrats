@@ -17,11 +17,13 @@ from labrats.db import (
     already_scraped,
     enforce_cap,
     last_scraped,
+    load_llm_summary,
     load_papers,
     load_results,
     log_scrape,
     open_db,
     papers_needing_eval,
+    upsert_llm_summary,
     upsert_papers,
     upsert_results,
 )
@@ -122,6 +124,7 @@ def _card_to_dict(card):
         "avg_score": card.avg_score,
         "disputed": card.disputed,
         "disputed_field": card.disputed_field,
+        "llm_summary": card.llm_summary,
     }
 
 
@@ -249,6 +252,8 @@ def _background_run(config_dir, db_path, model, api_base, source):
             )
             for card in new_cards:
                 upsert_results(conn, card.paper.doi, pname, card.results)
+                if card.llm_summary:
+                    upsert_llm_summary(conn, card.paper.doi, card.llm_summary)
 
         conn.close()
         _run_state["phase"] = "done"
@@ -405,7 +410,14 @@ class ServeHandler(BaseHTTPRequestHandler):
             res_map = load_results(conn, paper.doi, profile_name)
             results = [res_map[n] for n in persona_names if n in res_map]
             if results:
-                cards.append(PaperCard(paper=paper, results=results))
+                llm_summary = load_llm_summary(conn, paper.doi)
+                cards.append(
+                    PaperCard(
+                        paper=paper,
+                        results=results,
+                        llm_summary=llm_summary,
+                    )
+                )
 
         cards = score_cards(cards)
         conn.close()

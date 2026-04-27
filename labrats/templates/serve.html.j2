@@ -225,7 +225,27 @@ header {
 .tooltip-box .t-scores { color: #aaa; padding-left: 0.5rem; }
 .tooltip-wrap:hover .tooltip-box { display: block; }
 
-/* ── abstract ── */
+/* ── abstract / llm-summary ── */
+.abstract-tabs {
+	display: flex;
+	gap: 0.3rem;
+	margin-bottom: 0.4rem;
+}
+.abstract-tab-btn {
+	padding: 0.12rem 0.5rem;
+	background: none;
+	border: 1px solid #ddd;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 0.73rem;
+	color: #777;
+}
+.abstract-tab-btn:hover { border-color: #999; color: #333; }
+.abstract-tab-btn.active {
+	background: #1a1a1a;
+	color: #fff;
+	border-color: #1a1a1a;
+}
 .abstract {
 	font-size: 0.83rem;
 	color: #444;
@@ -233,6 +253,19 @@ header {
 	margin-bottom: 0.9rem;
 	padding-left: 0.75rem;
 	border-left: 3px solid #ececec;
+}
+.llm-summary {
+	display: none;
+	font-size: 0.83rem;
+	color: #444;
+	line-height: 1.6;
+	margin-bottom: 0.9rem;
+	padding-left: 0.75rem;
+	border-left: 3px solid #d0e4ff;
+}
+.llm-summary .summary-label {
+	font-weight: 600;
+	color: #555;
 }
 
 /* ── persona buttons ── */
@@ -784,6 +817,64 @@ function renderDigestCards(profile, cards) {
   document.getElementById("digest-content").innerHTML = html;
 }
 
+function parseLlmSummary(text) {
+  var sections = ["Background", "Methods", "Results", "Discussion"];
+  var result = {};
+  sections.forEach(function(label, i) {
+    var next = sections[i + 1];
+    var re = new RegExp(
+      label + ":\\s*([\\s\\S]*?)" +
+      (next ? "(?=" + next + ":)" : "$"),
+      "i"
+    );
+    var m = text.match(re);
+    result[label] = m ? m[1].trim() : "";
+  });
+  return result;
+}
+
+function renderAbstractSection(card, cid) {
+  var p = card.paper;
+  var hasSummary = card.llm_summary && card.llm_summary.length > 0;
+  var tabs = hasSummary
+    ? '<div class="abstract-tabs">' +
+        '<button class="abstract-tab-btn active" ' +
+          'onclick="switchAbstractTab(this,\'abs-' + cid + '\',\'sum-' + cid + '\')">' +
+          'Abstract</button>' +
+        '<button class="abstract-tab-btn" ' +
+          'onclick="switchAbstractTab(this,\'sum-' + cid + '\',\'abs-' + cid + '\')">' +
+          'LLM Summary</button>' +
+      '</div>'
+    : "";
+  var abstractEl =
+    '<p class="abstract" id="abs-' + cid + '">' +
+      esc(p.abstract) + '</p>';
+  var summaryEl = "";
+  if (hasSummary) {
+    var parsed = parseLlmSummary(card.llm_summary);
+    var sections = ["Background", "Methods", "Results", "Discussion"];
+    var inner = sections.map(function(label) {
+      var val = parsed[label] || "Not stated.";
+      return '<span class="summary-label">' + label + ':</span> ' +
+             esc(val);
+    }).join("<br>");
+    summaryEl =
+      '<div class="llm-summary" id="sum-' + cid + '">' +
+        inner + '</div>';
+  }
+  return tabs + abstractEl + summaryEl;
+}
+
+function switchAbstractTab(btn, showId, hideId) {
+  document.getElementById(showId).style.display = "block";
+  document.getElementById(hideId).style.display = "none";
+  var row = btn.closest(".abstract-tabs");
+  row.querySelectorAll(".abstract-tab-btn").forEach(function(b) {
+    b.classList.remove("active");
+  });
+  btn.classList.add("active");
+}
+
 function renderOneCard(card) {
   var cid = ++_cardId;
   var p = card.paper;
@@ -870,7 +961,7 @@ function renderOneCard(card) {
         esc(p.category) + ' &middot; ' +
         esc(p.date) +
       '</div>' +
-      '<p class="abstract">' + esc(p.abstract) + '</p>' +
+      renderAbstractSection(card, cid) +
       (results.length
         ? '<div class="persona-row">' + personaBtns + '</div>' +
           personaPanels

@@ -11,7 +11,7 @@ from rich.progress import (
 )
 
 from labrats.models import Paper, PaperCard, PersonaConfig
-from labrats.personas import run_persona
+from labrats.personas import run_persona, summarize_abstract
 
 
 async def evaluate_paper(
@@ -26,8 +26,11 @@ async def evaluate_paper(
         run_persona(persona, paper, persona_prompt, model, api_base)
         for persona in personas
     ]
-    results = await asyncio.gather(*tasks)
-    return PaperCard(paper=paper, results=results)
+    tasks.append(summarize_abstract(paper, model, api_base))
+    gathered = await asyncio.gather(*tasks)
+    results = list(gathered[:-1])
+    llm_summary = gathered[-1]
+    return PaperCard(paper=paper, results=results, llm_summary=llm_summary)
 
 
 async def run_pipeline(

@@ -164,6 +164,57 @@ def _build_messages(
     ]
 
 
+_SUMMARY_SYSTEM = (
+    "You are a scientific abstract summarizer. "
+    "Structure the abstract into exactly four labeled sections: "
+    "Background, Methods, Results, Discussion. "
+    "Each section is 1-2 sentences. "
+    "If a section cannot be inferred from the abstract, write 'Not stated.' "
+    "Respond only with the four labeled lines, nothing else."
+)
+
+_SUMMARY_USER = (
+    "Abstract:\n{abstract}\n\n"
+    "Background: ...\n"
+    "Methods: ...\n"
+    "Results: ...\n"
+    "Discussion: ..."
+)
+
+
+async def summarize_abstract(
+    paper: Paper,
+    model: str,
+    api_base: str | None = None,
+) -> str:
+    """Return a Background/Methods/Results/Discussion summary of the abstract."""
+    effective_model = model
+    messages = [
+        {"role": "system", "content": _SUMMARY_SYSTEM},
+        {
+            "role": "user",
+            "content": _SUMMARY_USER.format(abstract=paper.abstract),
+        },
+    ]
+    kwargs: dict = {
+        "model": effective_model,
+        "messages": messages,
+        "temperature": 0.2,
+    }
+
+    if api_base is None and "/" not in effective_model:
+        api_base = resolve_local_model(effective_model)
+
+    if api_base is not None:
+        if "/" not in effective_model:
+            kwargs["model"] = f"openai/{effective_model}"
+        kwargs["api_base"] = api_base
+        kwargs["api_key"] = "sk-local"
+
+    response = await acompletion(**kwargs)
+    return (response.choices[0].message.content or "").strip()
+
+
 async def run_persona(
     persona: PersonaConfig,
     paper: Paper,

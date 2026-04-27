@@ -47,3 +47,4 @@ class PaperCard:
     avg_score: float = 0.0        # mean of all persona scores
     disputed: bool = False        # tension exceeds TENSION_THRESHOLD
     disputed_field: str = ""      # field with highest variance
+    llm_summary: str = ""         # structured abstract (Background/Methods/Results/Discussion)
