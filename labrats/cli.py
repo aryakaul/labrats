@@ -18,7 +18,12 @@ from labrats.models_registry import (
     list_cloud_models,
     list_local_models,
 )
-from labrats.personas import load_personas, load_profiles, load_settings
+from labrats.personas import (
+    DEFAULT_PERSONA_PROMPT,
+    load_personas,
+    load_profiles,
+    load_settings,
+)
 from labrats.pipeline import run_pipeline
 from labrats.scraper import (
     fetch_from_sources,
@@ -173,7 +178,8 @@ def _fetch_and_warn(start, end, source, topics):
 @app.command()
 def init(
     config_dir: Path = typer.Option(None, help=_CFG_HELP),
-    force: bool = typer.Option(False, "--force", help="Overwrite existing files"),
+    db_path: Path = typer.Option(None, help=_DB_HELP),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing files and clear the database"),
 ):
     """Seed config dir with bundled defaults."""
     target = config_dir or _config_dir()
@@ -200,6 +206,14 @@ def init(
     for f in skipped:
         rprint(f"  [yellow]skipped[/yellow]  {f}  (--force to overwrite)")
     rprint(f"\nConfig dir: {target}")
+
+    if force:
+        db = db_path or _db_path()
+        if db.exists():
+            db.unlink()
+            rprint(f"  [green]cleared[/green]   database  {db}")
+        else:
+            rprint(f"  [dim]no database at {db}[/dim]")
 
 
 @app.command()
@@ -368,6 +382,9 @@ def test(
     pnames = matched_profile.get("personas")
     personas = [p for p in load_personas(cfg, pnames) if p.enabled]
     effective_model = matched_profile.get("model") or model
+    persona_prompt = (
+        matched_profile.get("persona_prompt") or DEFAULT_PERSONA_PROMPT
+    )
     paper = matched_papers[0]
 
     rprint(
@@ -375,7 +392,9 @@ def test(
         f"[bold]Paper:[/bold] {paper.title}\n"
     )
     cards = asyncio.run(
-        run_pipeline([paper], personas, effective_model, api_base)
+        run_pipeline(
+            [paper], personas, persona_prompt, effective_model, api_base,
+        )
     )
     cards = score_cards(cards)
     card = cards[0]
@@ -386,5 +405,5 @@ def test(
         rprint(f"  {r.summary}\n")
     rprint(
         f"Tension: {card.tension:.2f}  "
-        f"Interestingness: {card.interestingness:.2f}"
+        f"Score: {card.avg_score:.2f}"
     )

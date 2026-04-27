@@ -722,7 +722,7 @@ function toggleAll(masterCb) {
 
 function readChecked(container, selector) {
   return Array.from(container.querySelectorAll(
-    selector + " input[type=checkbox]"
+    selector + " input[type=checkbox]:not([onchange])"
   )).filter(function(cb) {
     return cb.checked;
   }).map(function(cb) { return cb.value; });

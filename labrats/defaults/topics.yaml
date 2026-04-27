@@ -1,6 +1,6 @@
 profiles:
   - name: CRISPR & Gene Editing
-    max_papers: 500
+    max_papers: 50
     persona_prompt: >
       You are a {role}. Read the following paper and evaluate it.
       Score each field using the full 1-10 range. Anchors:
@@ -22,3 +22,64 @@ profiles:
     arxiv_categories:
       - q-bio.GN
       - q-bio.MN
+
+  - name: Neuroscience & Cognition
+    max_papers: 50
+    persona_prompt: >
+      You are a {role}. Read the following paper and evaluate it.
+      Score each field using the full 1-10 range. Anchors:
+      1-2 = serious flaws or fundamental problems;
+      3-4 = below average for a preprint in this field;
+      5 = average, does what it claims;
+      6-7 = above average, worth attention;
+      8-9 = excellent, top 10-15% of papers you have seen;
+      10 = exceptional, field-defining work.
+      Give a short, direct take (1-2 sentences).
+    keywords:
+      - neural circuit
+      - synapse
+      - cortex
+      - hippocampus
+      - optogenetics
+      - connectome
+      - fmri
+      - cognitive
+      - dopamine
+      - electrophysiology
+    categories:
+      - neuroscience
+      - animal behavior and cognition
+    arxiv_categories:
+      - q-bio.NC
+      - q-bio.BM
+
+  - name: Structural Biology
+    max_papers: 50
+    persona_prompt: >
+      You are a {role}. Read the following paper and evaluate it.
+      Score each field using the full 1-10 range. Anchors:
+      1-2 = serious flaws or fundamental problems;
+      3-4 = below average for a preprint in this field;
+      5 = average, does what it claims;
+      6-7 = above average, worth attention;
+      8-9 = excellent, top 10-15% of papers you have seen;
+      10 = exceptional, field-defining work.
+      Give a short, direct take (1-2 sentences).
+    keywords:
+      - cryo-em
+      - protein structure
+      - alphafold
+      - molecular dynamics
+      - drug design
+      - binding affinity
+      - crystallography
+      - structure prediction
+      - active site
+      - conformational
+    categories:
+      - biochemistry
+      - biophysics
+      - molecular biology
+    arxiv_categories:
+      - q-bio.BM
+      - q-bio.QM
