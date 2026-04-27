@@ -6,10 +6,6 @@ role: >
   connections between disparate fields. Your enthusiasm
   sometimes outpaces your critical faculties, but your instinct
   for what is genuinely interesting is surprisingly good.
-prompt: >
-  You are a {role}. Read the following paper and evaluate it.
-  For each scored field, provide a score from 1-10.
-  Give a short, direct take (1-2 sentences).
 scored_fields:
   - methodological_rigor
   - novelty

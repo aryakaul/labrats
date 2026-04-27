@@ -267,12 +267,12 @@ header {
 	border: 1px solid #e8e8e8;
 	border-radius: 4px;
 }
-.persona-detail-scores {
+.persona-detail-header {
 	font-size: 0.75rem;
 	color: #777;
 	margin-bottom: 0.3rem;
 }
-.persona-detail-model {
+.persona-detail-scores {
 	font-size: 0.7rem;
 	color: #bbb;
 	margin-top: 0.3rem;
@@ -789,15 +789,6 @@ function renderOneCard(card) {
   var p = card.paper;
   var results = card.results || [];
 
-  // compute avg for tooltip
-  var scoreTotal = 0, scoreCnt = 0;
-  results.forEach(function(r) {
-    Object.values(r.scores).forEach(function(v) {
-      scoreTotal += v; scoreCnt++;
-    });
-  });
-  var avg = scoreCnt > 0 ? scoreTotal / scoreCnt : 0;
-
   // tooltip persona lines
   var tooltipPersonas = results.map(function(r) {
     var scores = Object.keys(r.scores).map(function(k) {
@@ -808,9 +799,18 @@ function renderOneCard(card) {
       '<div class="t-scores">' + scores + '</div>';
   }).join("");
 
-  var tensionBadge = card.tension > 1.0
+  var disputedField = card.disputed_field
+    ? card.disputed_field.replace(/_/g, " ")
+    : "";
+  var consensusLine = card.disputed
+    ? 'Personas disagreed on <strong>' +
+        esc(disputedField) +
+        '</strong> &mdash; worth reading yourself.'
+    : 'Personas broadly agree on this paper.';
+
+  var tensionBadge = card.disputed
     ? '<span class="badge badge-tension">' +
-        'tension ' + card.tension.toFixed(1) + '</span>'
+        'disputed: ' + esc(disputedField) + '</span>'
     : "";
 
   // persona buttons + panels
@@ -825,24 +825,25 @@ function renderOneCard(card) {
     var scores = Object.keys(r.scores).map(function(k) {
       return esc(k) + ": " + r.scores[k].toFixed(0);
     }).join(" &middot; ");
-    var footer = '<div class="persona-detail-model">' +
+    var footer = '<div class="persona-detail-header">' +
       esc(r.persona_name) +
       (r.model ? ' &middot; ' + esc(r.model) : '') +
       '</div>';
     return '<div class="persona-detail" ' +
       'id="pd-' + cid + '-' + i + '">' +
-      '<div class="persona-detail-scores">' +
-        scores + '</div>' +
+      footer +
       '<div class="persona-detail-summary">' +
         esc(r.summary) + '</div>' +
-      footer + '</div>';
+      '<div class="persona-detail-scores">' +
+        scores + '</div>' +
+      '</div>';
   }).join("");
 
   var authors = (p.authors || []).join(", ");
 
   return (
     '<div class="card" ' +
-      'data-score="' + card.interestingness.toFixed(6) + '" ' +
+      'data-score="' + card.avg_score.toFixed(6) + '" ' +
       'data-date="' + esc(p.date) + '">' +
       '<div class="card-header">' +
         '<div class="card-title">' +
@@ -850,14 +851,12 @@ function renderOneCard(card) {
             esc(p.title) + '</a></div>' +
         '<div class="badges">' +
           '<span class="badge badge-interest tooltip-wrap">' +
-            card.interestingness.toFixed(1) +
+            card.avg_score.toFixed(1) +
             '<span class="tooltip-box">' +
-              '<div class="t-head">Interestingness: ' +
-                card.interestingness.toFixed(2) + '</div>' +
+              '<div class="t-head">Score: ' +
+                card.avg_score.toFixed(2) + '</div>' +
               '<div class="t-formula">' +
-                '0.6 &times; avg (' + avg.toFixed(2) +
-                ') + 0.4 &times; tension (' +
-                card.tension.toFixed(2) + ')</div>' +
+                consensusLine + '</div>' +
               (results.length
                 ? '<hr class="t-divider">' + tooltipPersonas
                 : "") +
@@ -1080,11 +1079,6 @@ function personaFormHTML(p, mode) {
   var stem = p ? p.stem : "";
   var name = p ? p.name : "";
   var role = p ? p.role : "";
-  var prompt = p ? p.prompt :
-    "You are a {role}. Read the following paper and " +
-    "evaluate it.\nFor each scored field, provide a " +
-    "score from 1-10.\nGive a short, direct take " +
-    "(1-2 sentences).";
   var fields = p ? p.scored_fields.join(", ") :
     "methodological_rigor, novelty, relevance";
   var model = p ? (p.model || "") : "";
@@ -1104,12 +1098,6 @@ function personaFormHTML(p, mode) {
       '<label>Role</label>' +
       '<textarea class="pf-role">' +
         esc(role) + '</textarea>' +
-    '</div>' +
-    '<div class="form-group">' +
-      '<label>Prompt</label>' +
-      '<textarea class="pf-prompt" rows="3">' +
-        esc(prompt) + '</textarea>' +
-      '<div class="form-hint">Use {role} as placeholder</div>' +
     '</div>' +
     '<div class="form-group">' +
       '<label>Scored fields</label>' +
@@ -1140,7 +1128,6 @@ function readPersonaForm(container) {
   return {
     name: container.querySelector(".pf-name").value.trim(),
     role: container.querySelector(".pf-role").value.trim(),
-    prompt: container.querySelector(".pf-prompt").value.trim(),
     scored_fields: container.querySelector(".pf-fields")
       .value.split(",").map(function(s) {
         return s.trim();
@@ -1280,6 +1267,7 @@ function profileFormHTML(prof, idx, mode) {
   var selArxiv = prof ? (prof.arxiv_categories || []) : [];
   var maxP = prof ? (prof.max_papers || 500) : 500;
   var profMdl = prof ? (prof.model || "") : "";
+  var personaPrompt = prof ? (prof.persona_prompt || "") : "";
   var assigned = prof ? (prof.personas || []) : [];
   var action = mode === "update"
     ? "saveProfile(" + idx + ")"
@@ -1329,6 +1317,14 @@ function profileFormHTML(prof, idx, mode) {
         maxP + '" min="1">' +
     '</div>' +
     '<div class="form-group">' +
+      '<label>Persona prompt</label>' +
+      '<textarea class="pr-persona-prompt" rows="5">' +
+        esc(personaPrompt) + '</textarea>' +
+      '<div class="form-hint">' +
+        'Use {role} as placeholder. ' +
+        'Leave blank to use the default prompt.</div>' +
+    '</div>' +
+    '<div class="form-group">' +
       '<label>Personas</label>' +
       '<div class="check-grid pr-personas">' +
         personaChecks + '</div>' +
@@ -1353,6 +1349,8 @@ function readProfileForm(container) {
   var selected = readChecked(container, ".pr-personas");
   var mdl = container.querySelector(".pr-model")
     .value.trim();
+  var pp = container.querySelector(".pr-persona-prompt")
+    .value.trim();
   var data = {
     name: container.querySelector(".pr-name").value.trim(),
     keywords: container.querySelector(".pr-kws")
@@ -1365,6 +1363,7 @@ function readProfileForm(container) {
       container.querySelector(".pr-max").value, 10) || 500,
   };
   if (mdl) data.model = mdl;
+  if (pp) data.persona_prompt = pp;
   if (selected.length) data.personas = selected;
   return data;
 }

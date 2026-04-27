@@ -10,6 +10,18 @@ from litellm import acompletion
 from labrats.models import Paper, PersonaConfig, PersonaResult
 from labrats.models_registry import resolve_local_model
 
+DEFAULT_PERSONA_PROMPT = (
+    "You are a {role}. Read the following paper and evaluate it.\n"
+    "Score each field using the full 1-10 range. Anchors: "
+    "1-2 = serious flaws or fundamental problems; "
+    "3-4 = below average for a preprint in this field; "
+    "5 = average, does what it claims; "
+    "6-7 = above average, worth attention; "
+    "8-9 = excellent, top 10-15% of papers you have seen; "
+    "10 = exceptional, field-defining work.\n"
+    "Give a short, direct take (1-2 sentences)."
+)
+
 
 def _slugify(name: str) -> str:
     s = name.lower().strip()
@@ -79,7 +91,6 @@ def load_personas(
             PersonaConfig(
                 name=data["name"],
                 role=data["role"],
-                prompt=data["prompt"],
                 scored_fields=data["scored_fields"],
                 model=data.get("model"),
                 enabled=data.get("enabled", True),
@@ -106,7 +117,6 @@ def save_persona(
     data = {
         "name": persona["name"],
         "role": persona["role"],
-        "prompt": persona["prompt"],
         "scored_fields": persona["scored_fields"],
     }
     if persona.get("model"):
@@ -135,8 +145,9 @@ def delete_persona(config_dir: Path, stem: str) -> None:
 def _build_messages(
     persona: PersonaConfig,
     paper: Paper,
+    persona_prompt: str,
 ) -> list[dict]:
-    system = persona.prompt.format(role=persona.role)
+    system = persona_prompt.format(role=persona.role)
     fields_spec = ", ".join(persona.scored_fields)
     user_msg = (
         f"Title: {paper.title}\n\n"
@@ -156,12 +167,13 @@ def _build_messages(
 async def run_persona(
     persona: PersonaConfig,
     paper: Paper,
+    persona_prompt: str,
     model: str,
     api_base: str | None = None,
 ) -> PersonaResult:
     """Call the LLM as this persona and parse the scored JSON response."""
     effective_model = persona.model or model
-    messages = _build_messages(persona, paper)
+    messages = _build_messages(persona, paper, persona_prompt)
     kwargs: dict = {
         "model": effective_model,
         "messages": messages,

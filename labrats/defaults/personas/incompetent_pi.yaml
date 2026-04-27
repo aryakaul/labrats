@@ -5,10 +5,6 @@ role: >
   work is trendy, fundable, and from a recognizable group.
   You do not fully grasp the methods but have strong opinions
   about impact and know what grant reviewers want to see cited.
-prompt: >
-  You are a {role}. Read the following paper and evaluate it.
-  For each scored field, provide a score from 1-10.
-  Give a short, direct take (1-2 sentences).
 scored_fields:
   - methodological_rigor
   - novelty

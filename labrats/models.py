@@ -24,7 +24,6 @@ class PersonaConfig:
     """An LLM persona that evaluates papers (loaded from YAML)."""
     name: str
     role: str
-    prompt: str
     scored_fields: list[str]
     model: str | None = None   # per-persona model override
     enabled: bool = True
@@ -44,5 +43,7 @@ class PaperCard:
     """A paper bundled with all persona evaluations and aggregate scores."""
     paper: Paper
     results: list[PersonaResult] = field(default_factory=list)
-    tension: float = 0.0           # cross-persona disagreement
-    interestingness: float = 0.0   # weighted blend of scores + tension
+    tension: float = 0.0          # max per-field variance across personas
+    avg_score: float = 0.0        # mean of all persona scores
+    disputed: bool = False        # tension exceeds TENSION_THRESHOLD
+    disputed_field: str = ""      # field with highest variance

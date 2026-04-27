@@ -1,6 +1,16 @@
 profiles:
   - name: CRISPR & Gene Editing
     max_papers: 500
+    persona_prompt: >
+      You are a {role}. Read the following paper and evaluate it.
+      Score each field using the full 1-10 range. Anchors:
+      1-2 = serious flaws or fundamental problems;
+      3-4 = below average for a preprint in this field;
+      5 = average, does what it claims;
+      6-7 = above average, worth attention;
+      8-9 = excellent, top 10-15% of papers you have seen;
+      10 = exceptional, field-defining work.
+      Give a short, direct take (1-2 sentences).
     keywords:
       - crispr
       - gene editing

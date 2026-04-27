@@ -17,12 +17,14 @@ from labrats.personas import run_persona
 async def evaluate_paper(
     paper: Paper,
     personas: list[PersonaConfig],
+    persona_prompt: str,
     model: str,
     api_base: str | None = None,
 ) -> PaperCard:
     """Evaluate a single paper with all personas concurrently."""
     tasks = [
-        run_persona(persona, paper, model, api_base) for persona in personas
+        run_persona(persona, paper, persona_prompt, model, api_base)
+        for persona in personas
     ]
     results = await asyncio.gather(*tasks)
     return PaperCard(paper=paper, results=results)
@@ -31,6 +33,7 @@ async def evaluate_paper(
 async def run_pipeline(
     papers: list[Paper],
     personas: list[PersonaConfig],
+    persona_prompt: str,
     model: str,
     api_base: str | None = None,
 ) -> list[PaperCard]:
@@ -44,7 +47,9 @@ async def run_pipeline(
     ) as progress:
         task = progress.add_task("Evaluating papers", total=len(papers))
         for paper in papers:
-            card = await evaluate_paper(paper, personas, model, api_base)
+            card = await evaluate_paper(
+                paper, personas, persona_prompt, model, api_base,
+            )
             cards.append(card)
             progress.advance(task)
     return cards
@@ -53,6 +58,7 @@ async def run_pipeline(
 async def run_pipeline_headless(
     papers: list[Paper],
     personas: list[PersonaConfig],
+    persona_prompt: str,
     model: str,
     api_base: str | None = None,
     on_progress=None,
@@ -61,7 +67,9 @@ async def run_pipeline_headless(
     cards = []
     total = len(papers)
     for i, paper in enumerate(papers):
-        card = await evaluate_paper(paper, personas, model, api_base)
+        card = await evaluate_paper(
+            paper, personas, persona_prompt, model, api_base,
+        )
         cards.append(card)
         if on_progress:
             on_progress(i + 1, total)

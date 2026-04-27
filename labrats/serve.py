@@ -33,6 +33,7 @@ from labrats.models_registry import (
     list_cloud_models,
 )
 from labrats.personas import (
+    DEFAULT_PERSONA_PROMPT,
     delete_persona,
     load_personas,
     load_profiles,
@@ -87,7 +88,6 @@ def _list_personas_raw(config_dir):
             "stem": path.stem,
             "name": data["name"],
             "role": data["role"],
-            "prompt": data["prompt"],
             "scored_fields": data["scored_fields"],
             "model": data.get("model", ""),
             "enabled": data.get("enabled", True),
@@ -119,7 +119,9 @@ def _card_to_dict(card):
             for r in card.results
         ],
         "tension": card.tension,
-        "interestingness": card.interestingness,
+        "avg_score": card.avg_score,
+        "disputed": card.disputed,
+        "disputed_field": card.disputed_field,
     }
 
 
@@ -225,6 +227,9 @@ def _background_run(config_dir, db_path, model, api_base, source):
 
             persona_names = [p.name for p in personas]
             effective_model = profile.get("model") or model
+            persona_prompt = (
+                profile.get("persona_prompt") or DEFAULT_PERSONA_PROMPT
+            )
             to_eval = papers_needing_eval(
                 conn, db_papers, pname, persona_names,
             )
@@ -238,8 +243,8 @@ def _background_run(config_dir, db_path, model, api_base, source):
 
             new_cards = asyncio.run(
                 run_pipeline_headless(
-                    to_eval, personas, effective_model,
-                    api_base, on_progress,
+                    to_eval, personas, persona_prompt,
+                    effective_model, api_base, on_progress,
                 )
             )
             for card in new_cards:

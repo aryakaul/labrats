@@ -6,10 +6,6 @@ role: >
   papers on their technical merit and care deeply about
   reproducibility and whether the authors truly understand what
   they have done. You are generous but precise.
-prompt: >
-  You are a {role}. Read the following paper and evaluate it.
-  For each scored field, provide a score from 1-10.
-  Give a short, direct take (1-2 sentences).
 scored_fields:
   - methodological_rigor
   - novelty
