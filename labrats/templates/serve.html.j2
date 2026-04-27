@@ -633,6 +633,7 @@ var modelsData = {};
 var digestProfiles = [];
 var digestData = {};
 var currentProfile = null;
+var _lastCompleted = 0;
 var currentView = "digest";
 var _dlCounter = 0;
 var _cardId = 0;
@@ -1002,6 +1003,7 @@ function sortDigest(key, btn) {
 
 /* ── run ── */
 function startRun() {
+  _lastCompleted = 0;
   var btn = document.getElementById("run-btn");
   btn.disabled = true;
   btn.textContent = "Running...";
@@ -1036,6 +1038,14 @@ function pollStatus() {
         bar.style.width = pct.toFixed(0) + "%";
       }
       el.textContent = parts.join(" — ");
+      // refresh the visible profile's cards whenever a paper finishes
+      var completed = prog.completed || 0;
+      if (completed > _lastCompleted && currentView === "digest" &&
+          currentProfile && s.profile === currentProfile) {
+        _lastCompleted = completed;
+        delete digestData[currentProfile];
+        loadDigestCards(currentProfile);
+      }
       setTimeout(pollStatus, 1500);
 
     } else if (s.status === "done") {
@@ -1044,11 +1054,12 @@ function pollStatus() {
       bar.style.width = "100%";
       btn.disabled = false;
       btn.textContent = "Run";
+      _lastCompleted = 0;
       setTimeout(function() {
         bar.style.width = "0";
         el.textContent = "";
       }, 3000);
-      // refresh digest
+      // final refresh of all profiles
       digestData = {};
       api("GET", "/api/digest").then(function(dp) {
         digestProfiles = dp;
