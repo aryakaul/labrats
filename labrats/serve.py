@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import os
 import threading
 import webbrowser
@@ -9,6 +10,8 @@ from datetime import date, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote
+
+from loguru import logger
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
@@ -167,7 +170,9 @@ def _background_run(config_dir, db_path, model, api_base, source):
             if not already_scraped(conn, p["name"], today)
         ]
 
-        if needs_scrape:
+        if not needs_scrape:
+            logger.info("scraping: all profiles already scraped today")
+        else:
             # First-time profiles (no papers in DB) get a full week;
             # returning profiles scrape from their last run to today.
             first_time, returning = [], []
@@ -177,6 +182,18 @@ def _background_run(config_dir, db_path, model, api_base, source):
                     (p["name"],),
                 ).fetchone()[0]
                 (first_time if count == 0 else returning).append(p)
+
+            if first_time:
+                names = ", ".join(p["name"] for p in first_time)
+                logger.info(
+                    f"scraping: {len(first_time)} new profile(s)"
+                    f" — backfill {week_start} → {end}: {names}"
+                )
+            if returning:
+                names = ", ".join(p["name"] for p in returning)
+                logger.info(
+                    f"scraping: {len(returning)} returning profile(s): {names}"
+                )
 
             # Use the earliest last-scrape across returning profiles
             # so no gap is missed; fall back to yesterday if unknown.
@@ -199,19 +216,28 @@ def _background_run(config_dir, db_path, model, api_base, source):
                 fetch_topics = {
                     "arxiv_categories": union_arxiv_cats(group),
                 }
-                all_papers, _errors = fetch_from_sources(
+                logger.info(f"fetching from {source}  ({fetch_start} → {end})")
+                all_papers, errors = fetch_from_sources(
                     fetch_start, end, source, fetch_topics,
                 )
+                for err in errors:
+                    logger.warning(f"source error: {err}")
+                logger.info(f"fetched {len(all_papers)} papers total")
                 for profile in group:
                     pname = profile["name"]
-                    cap = profile.get("max_papers", 500)
+                    cap = profile.get("max_papers") or 500
                     filtered = filter_by_topics(all_papers, profile)
+                    logger.info(
+                        f"  {pname:<30}  "
+                        f"{len(filtered)} papers after filter (cap {cap})"
+                    )
                     upsert_papers(conn, filtered, pname, today)
                     enforce_cap(conn, pname, cap)
                     log_scrape(conn, pname, today)
 
         # Evaluate each profile's papers with its personas
         _run_state["phase"] = "evaluating"
+        logger.info("─" * 48)
 
         for profile in profiles:
             pname = profile["name"]
@@ -222,10 +248,12 @@ def _background_run(config_dir, db_path, model, api_base, source):
                 if p.enabled
             ]
             if not personas:
+                logger.warning(f"  {pname}: no enabled personas — skipping")
                 continue
 
             db_papers = load_papers(conn, pname)
             if not db_papers:
+                logger.info(f"  {pname}: no papers in DB — skipping")
                 continue
 
             persona_names = [p.name for p in personas]
@@ -237,12 +265,21 @@ def _background_run(config_dir, db_path, model, api_base, source):
                 conn, db_papers, pname, persona_names,
             )
             if not to_eval:
+                logger.info(
+                    f"  {pname}: all {len(db_papers)} papers already evaluated"
+                )
                 continue
 
+            logger.info(
+                f"  {pname}: evaluating {len(to_eval)}/{len(db_papers)}"
+                f" papers  ×  {len(personas)} personas  [{effective_model}]"
+            )
             _run_state["progress"] = {"completed": 0, "total": len(to_eval)}
 
-            def on_progress(done, total):
+            def on_progress(done, total, _pname=pname):
                 _run_state["progress"] = {"completed": done, "total": total}
+                paper_title = to_eval[done - 1].title
+                logger.info(f"    [{done}/{total}] {paper_title[:72]}")
 
             new_cards = asyncio.run(
                 run_pipeline_headless(
@@ -255,11 +292,16 @@ def _background_run(config_dir, db_path, model, api_base, source):
                 if card.llm_summary:
                     upsert_llm_summary(conn, card.paper.doi, card.llm_summary)
 
+            logger.info(f"  {pname}: done")
+
         conn.close()
+        logger.info("─" * 48)
+        logger.info("run complete")
         _run_state["phase"] = "done"
         _run_state["status"] = "done"
 
     except Exception as e:
+        logger.exception(f"run failed: {e}")
         _run_state["status"] = "error"
         _run_state["error"] = str(e)
 
@@ -278,7 +320,7 @@ class ServeHandler(BaseHTTPRequestHandler):
     source: str = "all"
 
     def log_message(self, fmt, *args):
-        pass  # silence per-request logs
+        logger.debug(fmt % args if args else fmt)
 
     # ── response helpers ──
 
@@ -545,6 +587,10 @@ def serve(
     source: str = "all",
 ):
     """Start the HTTP server and open the browser."""
+    # suppress noisy third-party stdlib loggers
+    for noisy in ("httpx", "httpcore", "litellm", "urllib3", "requests"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
     ServeHandler.config_dir = config_dir
     ServeHandler.db_path = db_path
     ServeHandler.model = model
@@ -552,12 +598,15 @@ def serve(
     ServeHandler.source = source
     server = HTTPServer(("127.0.0.1", port), ServeHandler)
     url = f"http://127.0.0.1:{port}"
-    print(f"labrats → {url}")
-    print("Press Ctrl+C to stop.")
+    logger.info(f"labrats → {url}")
+    logger.info(f"source: {source}  |  model: {model or 'from settings'}")
+    logger.info(f"config: {config_dir}")
+    logger.info(f"db:     {db_path}")
+    logger.info("press Ctrl+C to stop")
     webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopped.")
+        logger.info("stopped")
     finally:
         server.server_close()

@@ -112,6 +112,8 @@ def upsert_papers(
 
 def enforce_cap(conn: sqlite3.Connection, profile: str, max_papers: int) -> None:
     """Delete oldest papers beyond the per-profile cap."""
+    if not max_papers:
+        return
     rows = conn.execute(
         "SELECT doi FROM papers WHERE profile = ? "
         "ORDER BY date DESC, fetched_at DESC LIMIT ?",

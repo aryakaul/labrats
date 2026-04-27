@@ -10,6 +10,7 @@ dependencies = [
 	"pyyaml",
 	"typer",
 	"rich",
+	"loguru",
 ]
 
 [project.scripts]

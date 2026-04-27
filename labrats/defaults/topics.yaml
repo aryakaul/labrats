@@ -1,6 +1,6 @@
 profiles:
   - name: CRISPR & Gene Editing
-    max_papers: 
+    max_papers: 5
     persona_prompt: >
       You are a {role}. Read the following paper and evaluate it.
       Score each field using the full 1-10 range. Anchors:

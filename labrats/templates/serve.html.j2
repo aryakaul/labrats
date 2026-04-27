@@ -1716,6 +1716,15 @@ function init() {
             'click Run.</p>' +
         '</div>';
     }
+    // reconnect to any in-progress background run
+    api("GET", "/api/run/status").then(function(s) {
+      if (s.status === "running") {
+        var btn = document.getElementById("run-btn");
+        btn.disabled = true;
+        btn.textContent = "Running...";
+        pollStatus();
+      }
+    });
   });
 }
 
