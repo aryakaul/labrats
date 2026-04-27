@@ -825,17 +825,17 @@ function renderOneCard(card) {
     var scores = Object.keys(r.scores).map(function(k) {
       return esc(k) + ": " + r.scores[k].toFixed(0);
     }).join(" &middot; ");
-    var model = r.model
-      ? '<div class="persona-detail-model">' +
-          esc(r.model) + '</div>'
-      : "";
+    var footer = '<div class="persona-detail-model">' +
+      esc(r.persona_name) +
+      (r.model ? ' &middot; ' + esc(r.model) : '') +
+      '</div>';
     return '<div class="persona-detail" ' +
       'id="pd-' + cid + '-' + i + '">' +
       '<div class="persona-detail-scores">' +
         scores + '</div>' +
       '<div class="persona-detail-summary">' +
         esc(r.summary) + '</div>' +
-      model + '</div>';
+      footer + '</div>';
   }).join("");
 
   var authors = (p.authors || []).join(", ");

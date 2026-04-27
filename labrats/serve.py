@@ -16,6 +16,7 @@ from jinja2 import Environment, FileSystemLoader
 from labrats.db import (
     already_scraped,
     enforce_cap,
+    last_scraped,
     load_papers,
     load_results,
     log_scrape,
@@ -148,6 +149,7 @@ def _background_run(config_dir, db_path, model, api_base, source):
         today = str(date.today())
         today_dt = date.today()
         start = str(today_dt - timedelta(days=1))
+        week_start = str(today_dt - timedelta(days=7))
         end = today
 
         profiles = load_profiles(config_dir)
@@ -161,17 +163,47 @@ def _background_run(config_dir, db_path, model, api_base, source):
         ]
 
         if needs_scrape:
-            fetch_topics = {"arxiv_categories": union_arxiv_cats(needs_scrape)}
-            all_papers, _errors = fetch_from_sources(
-                start, end, source, fetch_topics,
-            )
-            for profile in needs_scrape:
-                pname = profile["name"]
-                cap = profile.get("max_papers", 500)
-                filtered = filter_by_topics(all_papers, profile)
-                upsert_papers(conn, filtered, pname, today)
-                enforce_cap(conn, pname, cap)
-                log_scrape(conn, pname, today)
+            # First-time profiles (no papers in DB) get a full week;
+            # returning profiles scrape from their last run to today.
+            first_time, returning = [], []
+            for p in needs_scrape:
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM papers WHERE profile = ?",
+                    (p["name"],),
+                ).fetchone()[0]
+                (first_time if count == 0 else returning).append(p)
+
+            # Use the earliest last-scrape across returning profiles
+            # so no gap is missed; fall back to yesterday if unknown.
+            if returning:
+                last_dates = [
+                    last_scraped(conn, p["name"]) for p in returning
+                ]
+                returning_start = min(
+                    (d for d in last_dates if d), default=start,
+                )
+            else:
+                returning_start = start
+
+            for group, fetch_start in (
+                (first_time, week_start),
+                (returning, returning_start),
+            ):
+                if not group:
+                    continue
+                fetch_topics = {
+                    "arxiv_categories": union_arxiv_cats(group),
+                }
+                all_papers, _errors = fetch_from_sources(
+                    fetch_start, end, source, fetch_topics,
+                )
+                for profile in group:
+                    pname = profile["name"]
+                    cap = profile.get("max_papers", 500)
+                    filtered = filter_by_topics(all_papers, profile)
+                    upsert_papers(conn, filtered, pname, today)
+                    enforce_cap(conn, pname, cap)
+                    log_scrape(conn, pname, today)
 
         # Evaluate each profile's papers with its personas
         _run_state["phase"] = "evaluating"

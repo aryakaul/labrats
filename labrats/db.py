@@ -63,6 +63,16 @@ def already_scraped(conn: sqlite3.Connection, profile: str, today: str) -> bool:
     return row is not None
 
 
+def last_scraped(conn: sqlite3.Connection, profile: str) -> str | None:
+    """Return the most recent scrape date for a profile, or None."""
+    row = conn.execute(
+        "SELECT scraped_on FROM scrape_log "
+        "WHERE profile = ? ORDER BY scraped_on DESC LIMIT 1",
+        (profile,),
+    ).fetchone()
+    return row[0] if row else None
+
+
 def log_scrape(conn: sqlite3.Connection, profile: str, today: str) -> None:
     """Record that a profile was scraped on a given date."""
     conn.execute(
