@@ -117,8 +117,76 @@ header {
 	overflow-y: auto;
 	padding: 1.25rem 1.5rem;
 }
-.view { display: none; max-width: 760px; }
+.view { display: none; }
 .view.active { display: block; }
+#config-view { max-width: 80%; margin: 0 auto; }
+
+/* ── card + per-card persona panel ── */
+#digest-content { max-width: 80%; margin: 0 auto; }
+.card-wrapper {
+	display: flex;
+	align-items: flex-start;
+	gap: 1rem;
+	margin-bottom: 1rem;
+}
+.card-wrapper > .card {
+	flex: 1;
+	min-width: 0;
+	margin-bottom: 0;
+}
+.card-persona-panel {
+	width: 300px;
+	flex-shrink: 0;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 6px;
+	overflow-y: auto;
+	max-height: 520px;
+}
+.pp-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	padding: 0.75rem;
+	border-bottom: 1px solid #eee;
+	gap: 0.5rem;
+}
+.pp-name {
+	font-size: 0.85rem;
+	font-weight: 600;
+	color: #1a1a1a;
+}
+.pp-model {
+	font-size: 0.72rem;
+	color: #999;
+	font-weight: normal;
+	display: block;
+	margin-top: 0.1rem;
+}
+.pp-close {
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 1.1rem;
+	color: #bbb;
+	padding: 0;
+	line-height: 1;
+	flex-shrink: 0;
+}
+.pp-close:hover { color: #1a1a1a; }
+.pp-body { padding: 0.75rem; }
+.pp-summary {
+	font-size: 0.83rem;
+	color: #222;
+	line-height: 1.6;
+	margin-bottom: 0.75rem;
+}
+.pp-scores {
+	font-size: 0.72rem;
+	color: #bbb;
+	border-top: 1px solid #f0f0f0;
+	padding-top: 0.5rem;
+}
 
 /* ── sort controls ── */
 .panel-controls {
@@ -291,30 +359,6 @@ header {
 	border-color: #1a1a1a;
 }
 
-/* ── persona detail panel ── */
-.persona-detail {
-	display: none;
-	margin-top: 0.6rem;
-	padding: 0.6rem 0.75rem;
-	background: #fafafa;
-	border: 1px solid #e8e8e8;
-	border-radius: 4px;
-}
-.persona-detail-header {
-	font-size: 0.75rem;
-	color: #777;
-	margin-bottom: 0.3rem;
-}
-.persona-detail-scores {
-	font-size: 0.7rem;
-	color: #bbb;
-	margin-top: 0.3rem;
-}
-.persona-detail-summary {
-	font-size: 0.83rem;
-	color: #222;
-	line-height: 1.55;
-}
 
 /* ── toggle switch ── */
 .toggle {
@@ -637,6 +681,8 @@ var _lastCompleted = 0;
 var currentView = "digest";
 var _dlCounter = 0;
 var _cardId = 0;
+var _personaData = {};
+var _activePersonaKey = null;
 
 /* ── helpers ── */
 function esc(s) {
@@ -793,6 +839,8 @@ function loadDigestCards(profile) {
 }
 
 function renderDigestCards(profile, cards) {
+  _personaData = {};
+  closePersonaPanel();
   if (!cards || !cards.length) {
     document.getElementById("digest-content").innerHTML =
       '<div class="empty-state">' +
@@ -905,38 +953,26 @@ function renderOneCard(card) {
         'disputed: ' + esc(disputedField) + '</span>'
     : "";
 
-  // persona buttons + panels
+  // persona buttons — store data for per-card right panel
   var personaBtns = results.map(function(r, i) {
+    var key = 'pd-' + cid + '-' + i;
+    _personaData[key] = {
+      persona_name: r.persona_name,
+      model: r.model || '',
+      summary: r.summary,
+      scores: r.scores,
+    };
     return '<button class="persona-btn" ' +
-      'data-target="pd-' + cid + '-' + i + '" ' +
-      'onclick="togglePersona(this)">' +
+      'data-key="' + key + '" ' +
+      'data-cid="' + cid + '" ' +
+      'onclick="selectPersona(this)">' +
       esc(r.persona_name) + '</button>';
-  }).join("");
-
-  var personaPanels = results.map(function(r, i) {
-    var scores = Object.keys(r.scores).map(function(k) {
-      return esc(k) + ": " + r.scores[k].toFixed(0);
-    }).join(" &middot; ");
-    var footer = '<div class="persona-detail-header">' +
-      esc(r.persona_name) +
-      (r.model ? ' &middot; ' + esc(r.model) : '') +
-      '</div>';
-    return '<div class="persona-detail" ' +
-      'id="pd-' + cid + '-' + i + '">' +
-      footer +
-      '<div class="persona-detail-summary">' +
-        esc(r.summary) + '</div>' +
-      '<div class="persona-detail-scores">' +
-        scores + '</div>' +
-      '</div>';
   }).join("");
 
   var authors = (p.authors || []).join(", ");
 
-  return (
-    '<div class="card" ' +
-      'data-score="' + card.avg_score.toFixed(6) + '" ' +
-      'data-date="' + esc(p.date) + '">' +
+  var cardHTML =
+    '<div class="card">' +
       '<div class="card-header">' +
         '<div class="card-title">' +
           '<a href="' + esc(p.url) + '" target="_blank">' +
@@ -964,24 +1000,86 @@ function renderOneCard(card) {
       '</div>' +
       renderAbstractSection(card, cid) +
       (results.length
-        ? '<div class="persona-row">' + personaBtns + '</div>' +
-          personaPanels
+        ? '<div class="persona-row">' + personaBtns + '</div>'
         : "") +
+    '</div>';
+
+  var panelHTML = results.length
+    ? '<div class="card-persona-panel" id="cpp-' + cid + '" ' +
+        'style="display:none">' +
+        '<div class="pp-header">' +
+          '<div id="cpt-' + cid + '"></div>' +
+          '<button class="pp-close" ' +
+            'onclick="closePersonaPanel(' + cid + ')">×</button>' +
+        '</div>' +
+        '<div class="pp-body" id="cpb-' + cid + '"></div>' +
+      '</div>'
+    : "";
+
+  return (
+    '<div class="card-wrapper" ' +
+      'data-score="' + card.avg_score.toFixed(6) + '" ' +
+      'data-date="' + esc(p.date) + '">' +
+      cardHTML + panelHTML +
     '</div>'
   );
 }
 
-function togglePersona(btn) {
-  var id = btn.dataset.target;
-  var panel = document.getElementById(id);
-  var open = panel.style.display === "block";
-  panel.style.display = open ? "none" : "block";
-  btn.classList.toggle("active", !open);
+function selectPersona(btn) {
+  var key = btn.dataset.key;
+  var cid = btn.dataset.cid;
+  var alreadyActive = _activePersonaKey === key;
+
+  // close all open panels and deactivate all buttons
+  document.querySelectorAll('.card-persona-panel').forEach(
+    function(p) { p.style.display = 'none'; });
+  document.querySelectorAll('.persona-btn').forEach(
+    function(b) { b.classList.remove('active'); });
+
+  if (alreadyActive) {
+    _activePersonaKey = null;
+    return;
+  }
+
+  _activePersonaKey = key;
+  btn.classList.add('active');
+  var d = _personaData[key];
+  if (!d) return;
+
+  document.getElementById('cpt-' + cid).innerHTML =
+    '<div class="pp-name">' + esc(d.persona_name) + '</div>' +
+    (d.model
+      ? '<span class="pp-model">' + esc(d.model) + '</span>'
+      : '');
+  var scores = Object.keys(d.scores).map(function(k) {
+    return esc(k.replace(/_/g, ' ')) + ': ' +
+           d.scores[k].toFixed(0);
+  }).join(' &middot; ');
+  document.getElementById('cpb-' + cid).innerHTML =
+    '<div class="pp-summary">' + esc(d.summary) + '</div>' +
+    '<div class="pp-scores">' + scores + '</div>';
+  document.getElementById('cpp-' + cid).style.display = 'block';
+}
+
+function closePersonaPanel(cid) {
+  _activePersonaKey = null;
+  if (cid != null) {
+    var p = document.getElementById('cpp-' + cid);
+    if (p) p.style.display = 'none';
+    document.querySelectorAll(
+      '.persona-btn[data-cid="' + cid + '"]'
+    ).forEach(function(b) { b.classList.remove('active'); });
+  } else {
+    document.querySelectorAll('.card-persona-panel').forEach(
+      function(p) { p.style.display = 'none'; });
+    document.querySelectorAll('.persona-btn').forEach(
+      function(b) { b.classList.remove('active'); });
+  }
 }
 
 function sortDigest(key, btn) {
   var container = document.getElementById("digest-content");
-  var cards = Array.from(container.querySelectorAll(".card"));
+  var cards = Array.from(container.querySelectorAll(".card-wrapper"));
   if (key === "score") {
     cards.sort(function(a, b) {
       return parseFloat(b.dataset.score) -
