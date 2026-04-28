@@ -683,6 +683,7 @@ var _dlCounter = 0;
 var _cardId = 0;
 var _personaData = {};
 var _activePersonaKey = null;
+var _sortState = { key: 'score', dir: 'desc' };
 
 /* ── helpers ── */
 function esc(s) {
@@ -850,13 +851,17 @@ function renderDigestCards(profile, cards) {
     return;
   }
 
+  _sortState = { key: 'score', dir: 'desc' };
   var html =
     '<div class="panel-controls">' +
       'Sort by ' +
-      '<button class="sort-btn active" ' +
-        'onclick="sortDigest(\'score\', this)">score</button>' +
-      '<button class="sort-btn" ' +
-        'onclick="sortDigest(\'date\', this)">date</button>' +
+      '<button class="sort-btn active" data-sort-key="score" ' +
+        'onclick="sortDigest(\'score\', this)">' +
+        'score <span class="sort-arrow">&#9660;</span></button>' +
+      '<button class="sort-btn" data-sort-key="date" ' +
+        'onclick="sortDigest(\'date\', this)">' +
+        'date <span class="sort-arrow" style="display:none">' +
+        '&#9660;</span></button>' +
     '</div>';
 
   html += cards.map(function(card) {
@@ -1078,25 +1083,41 @@ function closePersonaPanel(cid) {
 }
 
 function sortDigest(key, btn) {
+  if (_sortState.key === key) {
+    _sortState.dir = _sortState.dir === 'desc' ? 'asc' : 'desc';
+  } else {
+    _sortState.key = key;
+    _sortState.dir = 'desc';
+  }
+  var dir = _sortState.dir;
+
   var container = document.getElementById("digest-content");
   var cards = Array.from(container.querySelectorAll(".card-wrapper"));
   if (key === "score") {
     cards.sort(function(a, b) {
-      return parseFloat(b.dataset.score) -
-             parseFloat(a.dataset.score);
+      var d = parseFloat(b.dataset.score) - parseFloat(a.dataset.score);
+      return dir === 'desc' ? d : -d;
     });
   } else {
     cards.sort(function(a, b) {
-      if (b.dataset.date > a.dataset.date) return 1;
-      if (b.dataset.date < a.dataset.date) return -1;
-      return 0;
+      var cmp = b.dataset.date > a.dataset.date ? 1 :
+                b.dataset.date < a.dataset.date ? -1 : 0;
+      return dir === 'desc' ? cmp : -cmp;
     });
   }
   cards.forEach(function(c) { container.appendChild(c); });
+
   container.querySelectorAll(".sort-btn").forEach(function(b) {
     b.classList.remove("active");
+    var arrow = b.querySelector(".sort-arrow");
+    if (arrow) arrow.style.display = "none";
   });
   btn.classList.add("active");
+  var arrow = btn.querySelector(".sort-arrow");
+  if (arrow) {
+    arrow.style.display = "";
+    arrow.innerHTML = dir === 'desc' ? '&#9660;' : '&#9650;';
+  }
 }
 
 /* ── run ── */
