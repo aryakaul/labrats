@@ -43,17 +43,11 @@ CREATE TABLE IF NOT EXISTS summaries (
 
 
 def open_db(db_path: Path) -> sqlite3.Connection:
-    """Open (and auto-create) the database, applying schema migrations."""
+    """Open (and auto-create) the database."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.executescript(_SCHEMA)
-    # migrate existing DBs that predate the model column
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(results)")}
-    if "model" not in cols:
-        conn.execute(
-            "ALTER TABLE results ADD COLUMN model TEXT NOT NULL DEFAULT ''"
-        )
     conn.commit()
     return conn
 
@@ -146,13 +140,9 @@ def load_papers(conn: sqlite3.Connection, profile: str) -> list[Paper]:
             doi=r["doi"],
             title=r["title"],
             authors=json.loads(r["authors"]),
-            author_corresponding="",
-            author_corresponding_institution="",
             abstract=r["abstract"],
             category=r["category"],
             date=r["date"],
-            version="",
-            type="",
             url=r["url"],
         )
         for r in rows
@@ -244,15 +234,3 @@ def upsert_llm_summary(
         (doi, summary),
     )
     conn.commit()
-
-
-def papers_needing_summary(
-    conn: sqlite3.Connection,
-    papers: list,
-) -> list:
-    """Return papers that have no cached LLM summary yet."""
-    if not papers:
-        return []
-    rows = conn.execute("SELECT doi FROM summaries").fetchall()
-    done = {r[0] for r in rows}
-    return [p for p in papers if p.doi not in done]

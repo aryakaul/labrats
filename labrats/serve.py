@@ -43,11 +43,12 @@ from labrats.personas import (
     load_personas,
     load_profiles,
     load_settings,
+    resolve_model,
     save_persona,
     save_profiles,
     save_settings,
 )
-from labrats.pipeline import run_pipeline_headless
+from labrats.pipeline import run_pipeline
 from labrats.scraper import (
     fetch_from_sources,
     filter_by_topics,
@@ -108,7 +109,6 @@ def _card_to_dict(card):
             "doi": p.doi,
             "title": p.title,
             "authors": p.authors,
-            "author_corresponding": p.author_corresponding,
             "abstract": p.abstract,
             "category": p.category,
             "date": p.date,
@@ -282,7 +282,7 @@ def _background_run(config_dir, db_path, model, api_base, source):
                 logger.info(f"    [{done}/{total}] {paper_title[:72]}")
 
             new_cards = asyncio.run(
-                run_pipeline_headless(
+                run_pipeline(
                     to_eval, personas, persona_prompt,
                     effective_model, api_base, on_progress,
                 )
@@ -494,13 +494,10 @@ class ServeHandler(BaseHTTPRequestHandler):
                 return
             _reset_run_state()
 
-        # Resolve model: CLI flag > settings.yaml > fallback
-        settings = load_settings(self.config_dir)
-        cfg_model = settings.get("default_model", "")
-        model = self.model or cfg_model or "openai/gpt-4o-mini"
+        model = resolve_model(self.model, self.config_dir)
 
         # Inject saved API keys into environment for litellm
-        api_keys = settings.get("api_keys", {})
+        api_keys = load_settings(self.config_dir).get("api_keys", {})
         for provider, env_var in PROVIDER_KEYS.items():
             val = api_keys.get(provider, "")
             if val and not os.environ.get(env_var):

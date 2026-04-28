@@ -12,14 +12,11 @@ _ATOM = "{http://www.w3.org/2005/Atom}"
 _ARXIV = "{http://arxiv.org/schemas/atom}"
 
 
-def fetch_papers(
-    start_date: str,
-    end_date: str,
-) -> list[Paper]:
+def fetch_papers(start_date: str, end_date: str) -> list[Paper]:
     papers = []
     cursor = 0
     while True:
-        url = f"{BIORXIV_API}" f"/{start_date}/{end_date}/{cursor}"
+        url = f"{BIORXIV_API}/{start_date}/{end_date}/{cursor}"
         resp = requests.get(url, timeout=30)
         resp.raise_for_status()
         data = resp.json()
@@ -29,33 +26,23 @@ def fetch_papers(
         status = data.get("messages", [{}])[0].get("status", "")
         if status not in ("ok", ""):
             raise RuntimeError(f"biorxiv API: {status}")
-        for entry in collection:
-            papers.append(_parse_paper(entry))
+        papers.extend(_parse_paper(e) for e in collection)
         cursor += len(collection)
     return papers
 
 
 def _parse_paper(entry: dict) -> Paper:
     doi = entry["doi"]
+    authors = [a.strip() for a in entry["authors"].split(";") if a.strip()]
     return Paper(
         doi=doi,
         title=entry["title"],
-        authors=_parse_authors(entry["authors"]),
-        author_corresponding=entry.get("author_corresponding", ""),
-        author_corresponding_institution=entry.get(
-            "author_corresponding_institution", ""
-        ),
+        authors=authors,
         abstract=entry["abstract"],
         category=entry["category"],
         date=entry["date"],
-        version=entry["version"],
-        type=entry["type"],
         url=f"https://www.biorxiv.org/content/{doi}",
     )
-
-
-def _parse_authors(raw: str) -> list[str]:
-    return [a.strip() for a in raw.split(";") if a.strip()]
 
 
 def fetch_papers_arxiv(
@@ -103,17 +90,11 @@ def fetch_papers_arxiv(
 
 def _parse_arxiv_entry(entry) -> Paper:
     raw_id = entry.findtext(f"{_ATOM}id", "")
-    # "http://arxiv.org/abs/2301.00001v2"
-    arxiv_id = raw_id.split("/abs/")[-1]
-    parts = arxiv_id.rsplit("v", 1)
-    canonical = parts[0]
-    version = parts[1] if len(parts) == 2 else "1"
+    # "http://arxiv.org/abs/2301.00001v2" -> "2301.00001"
+    canonical = raw_id.split("/abs/")[-1].rsplit("v", 1)[0]
 
     doi_el = entry.find(f"{_ARXIV}doi")
     doi = doi_el.text.strip() if doi_el is not None else f"arxiv:{canonical}"
-
-    title = (entry.findtext(f"{_ATOM}title") or "").strip()
-    abstract = (entry.findtext(f"{_ATOM}summary") or "").strip()
 
     authors = [
         n.text.strip()
@@ -122,66 +103,39 @@ def _parse_arxiv_entry(entry) -> Paper:
         if n is not None and n.text
     ]
 
-    published = entry.findtext(f"{_ATOM}published", "")
-    date = published[:10]
-
     # prefer primary_category from arxiv namespace
     pcat = entry.find(f"{_ARXIV}primary_category")
-    if pcat is not None:
-        category = pcat.get("term", "")
-    else:
-        cat_el = entry.find(f"{_ATOM}category")
-        category = cat_el.get("term", "") if cat_el is not None else ""
+    cat_el = pcat if pcat is not None else entry.find(f"{_ATOM}category")
+    category = cat_el.get("term", "") if cat_el is not None else ""
 
     return Paper(
         doi=doi,
-        title=title,
+        title=(entry.findtext(f"{_ATOM}title") or "").strip(),
         authors=authors,
-        author_corresponding=(authors[0] if authors else ""),
-        author_corresponding_institution="",
-        abstract=abstract,
+        abstract=(entry.findtext(f"{_ATOM}summary") or "").strip(),
         category=category,
-        date=date,
-        version=version,
-        type="",
+        date=entry.findtext(f"{_ATOM}published", "")[:10],
         url=f"https://arxiv.org/abs/{canonical}",
     )
 
 
-def filter_by_topics(
-    papers: list[Paper],
-    topics: dict,
-) -> list[Paper]:
+def filter_by_topics(papers: list[Paper], topics: dict) -> list[Paper]:
+    """Keep papers matching both keyword AND category (when each is set)."""
     keywords = [kw.lower() for kw in topics.get("keywords", [])]
-    # merge biorxiv and arxiv category lists so
-    # post-filter works for both sources
     categories = [
-        c.lower()
-        for c in (
-            topics.get("categories", []) + topics.get("arxiv_categories", [])
+        c.lower() for c in (
+            topics.get("categories", [])
+            + topics.get("arxiv_categories", [])
         )
     ]
-    results = []
-    for paper in papers:
-        if _matches_topics(paper, keywords, categories):
-            results.append(paper)
-    return results
 
+    def matches(p: Paper) -> bool:
+        in_cat = not categories or p.category.lower() in categories
+        text = f"{p.title} {p.abstract}".lower()
+        has_kw = not keywords or any(kw in text for kw in keywords)
+        return in_cat and has_kw
 
-def _matches_topics(
-    paper: Paper,
-    keywords: list[str],
-    categories: list[str],
-) -> bool:
-    in_category = (
-        not categories or paper.category.lower() in categories
-    )
-    has_keyword = (
-        not keywords
-        or any(kw in f"{paper.title} {paper.abstract}".lower()
-               for kw in keywords)
-    )
-    return in_category and has_keyword
+    return [p for p in papers if matches(p)]
 
 
 # ── helpers used by both cli.py and serve.py ──
@@ -208,11 +162,11 @@ def fetch_from_sources(
     end: str,
     source: str,
     topics: dict,
-) -> list[Paper]:
-    """Fetch from biorxiv and/or arxiv, dedup, and return papers.
+) -> tuple[list[Paper], list[str]]:
+    """Fetch from biorxiv and/or arxiv, dedup, return (papers, errors).
 
-    Raises RuntimeError if all requested sources fail.
-    Returns partial results if at least one source succeeds.
+    Raises RuntimeError only if all requested sources fail; partial
+    success returns whatever was fetched plus a list of error messages.
     """
     papers: list[Paper] = []
     errors: list[str] = []

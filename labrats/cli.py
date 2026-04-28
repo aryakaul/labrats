@@ -10,7 +10,7 @@ import requests
 import typer
 from rich import print as rprint
 
-from labrats.models import Paper, PersonaConfig
+from labrats.models import PersonaConfig
 from labrats.models_registry import (
     PROVIDER_DOCS,
     PROVIDER_KEYS,
@@ -23,6 +23,7 @@ from labrats.personas import (
     load_personas,
     load_profiles,
     load_settings,
+    resolve_model,
 )
 from labrats.pipeline import run_pipeline
 from labrats.scraper import (
@@ -42,7 +43,6 @@ _SRC_HELP = "Data source: biorxiv, arxiv, all"
 _API_HELP = "Local API base URL, e.g. http://localhost:2276/v1"
 _DB_HELP = "SQLite DB path (default: $XDG_DATA_HOME/labrats/labrats.db)"
 _MDL_HELP = "Default LLM model (overrides settings.yaml)"
-_FALLBACK_MODEL = "openai/gpt-4o-mini"
 
 
 # ── path helpers ──
@@ -53,13 +53,9 @@ def _config_dir() -> Path:
     return Path(xdg).expanduser() / "labrats"
 
 
-def _data_dir() -> Path:
-    xdg = os.environ.get("XDG_DATA_HOME", "~/.local/share")
-    return Path(xdg).expanduser() / "labrats"
-
-
 def _db_path() -> Path:
-    return _data_dir() / "labrats.db"
+    xdg = os.environ.get("XDG_DATA_HOME", "~/.local/share")
+    return Path(xdg).expanduser() / "labrats" / "labrats.db"
 
 
 def _require_config(config_dir: Path) -> None:
@@ -69,15 +65,6 @@ def _require_config(config_dir: Path) -> None:
             "Run [bold]labrats init[/bold] to create it."
         )
         raise typer.Exit(1)
-
-
-def _resolve_model(cli_model: str | None, config_dir: Path) -> str:
-    """CLI flag > settings.yaml > fallback."""
-    if cli_model:
-        return cli_model
-    settings = load_settings(config_dir)
-    cfg_model = settings.get("default_model", "")
-    return cfg_model or _FALLBACK_MODEL
 
 
 # ── preflight model/key checks ──
@@ -298,7 +285,7 @@ def serve(
 
     cfg = config_dir or _config_dir()
     _require_config(cfg)
-    mdl = _resolve_model(model, cfg)
+    mdl = resolve_model(model, cfg)
     db = db_path or _db_path()
     _serve(cfg, port, db, mdl, api_base, source)
 
@@ -312,7 +299,7 @@ def preview(
     """Show what would run without calling any LLM."""
     cfg = config_dir or _config_dir()
     _require_config(cfg)
-    model = _resolve_model(model, cfg)
+    model = resolve_model(model, cfg)
     profiles = load_profiles(cfg)
     fetch_topics = {"arxiv_categories": union_arxiv_cats(profiles)}
     today = date.today()
@@ -347,7 +334,7 @@ def test(
     """Run the full pipeline on a single paper (smoke test)."""
     cfg = config_dir or _config_dir()
     _require_config(cfg)
-    model = _resolve_model(model, cfg)
+    model = resolve_model(model, cfg)
     profiles = load_profiles(cfg)
 
     # Preflight: verify model access before scraping
@@ -366,7 +353,7 @@ def test(
 
     # Find first profile with matching papers
     matched_profile = None
-    matched_papers: list[Paper] = []
+    matched_papers = []
     for profile in profiles:
         filtered = filter_by_topics(papers, profile)
         if filtered:

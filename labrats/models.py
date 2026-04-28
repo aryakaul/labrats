@@ -9,13 +9,9 @@ class Paper:
     doi: str
     title: str
     authors: list[str]
-    author_corresponding: str
-    author_corresponding_institution: str
     abstract: str
     category: str
-    date: str          # YYYY-MM-DD
-    version: str
-    type: str
+    date: str  # YYYY-MM-DD
     url: str
 
 
@@ -25,7 +21,7 @@ class PersonaConfig:
     name: str
     role: str
     scored_fields: list[str]
-    model: str | None = None   # per-persona model override
+    model: str | None = None
     enabled: bool = True
 
 
@@ -33,7 +29,7 @@ class PersonaConfig:
 class PersonaResult:
     """One persona's evaluation of one paper."""
     persona_name: str
-    scores: dict[str, float]   # field_name -> 1-10
+    scores: dict[str, float]  # field_name -> 1-10
     summary: str
     model: str = ""
 
@@ -43,8 +39,8 @@ class PaperCard:
     """A paper bundled with all persona evaluations and aggregate scores."""
     paper: Paper
     results: list[PersonaResult] = field(default_factory=list)
-    tension: float = 0.0          # max per-field variance across personas
-    avg_score: float = 0.0        # mean of all persona scores
-    disputed: bool = False        # tension exceeds TENSION_THRESHOLD
-    disputed_field: str = ""      # field with highest variance
-    llm_summary: str = ""         # structured abstract (Background/Methods/Results/Discussion)
+    tension: float = 0.0
+    avg_score: float = 0.0
+    disputed: bool = False
+    disputed_field: str = ""
+    llm_summary: str = ""

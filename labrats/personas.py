@@ -10,6 +10,8 @@ from litellm import acompletion
 from labrats.models import Paper, PersonaConfig, PersonaResult
 from labrats.models_registry import resolve_local_model
 
+FALLBACK_MODEL = "openai/gpt-4o-mini"
+
 DEFAULT_PERSONA_PROMPT = (
     "You are a {role}. Read the following paper and evaluate it.\n"
     "Score each field using the full 1-10 range. Anchors: "
@@ -47,6 +49,13 @@ def save_settings(config_dir: Path, data: dict) -> None:
     with open(path, "w") as f:
         yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
     path.chmod(0o600)  # keys are sensitive
+
+
+def resolve_model(cli_model: str | None, config_dir: Path) -> str:
+    """CLI flag > settings.yaml default_model > FALLBACK_MODEL."""
+    if cli_model:
+        return cli_model
+    return load_settings(config_dir).get("default_model") or FALLBACK_MODEL
 
 
 # ── profiles (topics.yaml) ──
@@ -173,13 +182,25 @@ _SUMMARY_SYSTEM = (
     "Respond only with the four labeled lines, nothing else."
 )
 
-_SUMMARY_USER = (
-    "Abstract:\n{abstract}\n\n"
-    "Background: ...\n"
-    "Methods: ...\n"
-    "Results: ...\n"
-    "Discussion: ..."
-)
+
+def _completion_kwargs(
+    model: str,
+    messages: list[dict],
+    api_base: str | None,
+    **extra,
+) -> dict:
+    """Build litellm kwargs, auto-routing bare model names to local APIs."""
+    kwargs = {"model": model, "messages": messages, **extra}
+    # If no provider prefix and no explicit api_base, probe local endpoints
+    if api_base is None and "/" not in model:
+        api_base = resolve_local_model(model)
+    if api_base is not None:
+        # litellm needs "openai/" prefix to route to OpenAI-compatible APIs
+        if "/" not in model:
+            kwargs["model"] = f"openai/{model}"
+        kwargs["api_base"] = api_base
+        kwargs["api_key"] = "sk-local"
+    return kwargs
 
 
 async def summarize_abstract(
@@ -187,30 +208,19 @@ async def summarize_abstract(
     model: str,
     api_base: str | None = None,
 ) -> str:
-    """Return a Background/Methods/Results/Discussion summary of the abstract."""
-    effective_model = model
+    """Return a Background/Methods/Results/Discussion summary."""
+    user_msg = (
+        f"Abstract:\n{paper.abstract}\n\n"
+        "Background: ...\n"
+        "Methods: ...\n"
+        "Results: ...\n"
+        "Discussion: ..."
+    )
     messages = [
         {"role": "system", "content": _SUMMARY_SYSTEM},
-        {
-            "role": "user",
-            "content": _SUMMARY_USER.format(abstract=paper.abstract),
-        },
+        {"role": "user", "content": user_msg},
     ]
-    kwargs: dict = {
-        "model": effective_model,
-        "messages": messages,
-        "temperature": 0.2,
-    }
-
-    if api_base is None and "/" not in effective_model:
-        api_base = resolve_local_model(effective_model)
-
-    if api_base is not None:
-        if "/" not in effective_model:
-            kwargs["model"] = f"openai/{effective_model}"
-        kwargs["api_base"] = api_base
-        kwargs["api_key"] = "sk-local"
-
+    kwargs = _completion_kwargs(model, messages, api_base, temperature=0.2)
     response = await acompletion(**kwargs)
     return (response.choices[0].message.content or "").strip()
 
@@ -225,32 +235,17 @@ async def run_persona(
     """Call the LLM as this persona and parse the scored JSON response."""
     effective_model = persona.model or model
     messages = _build_messages(persona, paper, persona_prompt)
-    kwargs: dict = {
-        "model": effective_model,
-        "messages": messages,
-        "response_format": {"type": "json_object"},
-        "temperature": 0.3,
-    }
-
-    # Auto-detect local models: if no provider prefix and no explicit
-    # api_base, probe known local endpoints (Ollama, LM Studio, etc.)
-    if api_base is None and "/" not in effective_model:
-        api_base = resolve_local_model(effective_model)
-
-    if api_base is not None:
-        # litellm needs "openai/" prefix to route to OpenAI-compatible APIs
-        if "/" not in effective_model:
-            kwargs["model"] = f"openai/{effective_model}"
-        kwargs["api_base"] = api_base
-        kwargs["api_key"] = "sk-local"
-
+    kwargs = _completion_kwargs(
+        effective_model, messages, api_base,
+        response_format={"type": "json_object"},
+        temperature=0.3,
+    )
     response = await acompletion(**kwargs)
     content = (response.choices[0].message.content or "").strip()
 
     # Strip markdown code fences emitted by some local models
     if content.startswith("```"):
-        lines = content.splitlines()
-        content = "\n".join(lines[1:-1]).strip()
+        content = "\n".join(content.splitlines()[1:-1]).strip()
 
     raw = json.loads(content)
     return PersonaResult(
