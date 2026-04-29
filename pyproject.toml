@@ -2,7 +2,12 @@
 name = "labrats"
 version = "0.1.0"
 description = "Personalized biorxiv preprint triage and ideation engine"
+readme = "README.md"
 requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+	{ name = "Arya Kaul", email = "contact@arya.casa" },
+]
 dependencies = [
 	"requests",
 	"litellm",
@@ -17,6 +22,10 @@ dev = ["pytest"]
 
 [project.scripts]
 labrats = "labrats.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/aryakaul/labrats"
+Issues = "https://github.com/aryakaul/labrats/issues"
 
 [build-system]
 requires = ["hatchling"]
