@@ -5,7 +5,6 @@ description = "Personalized biorxiv preprint triage and ideation engine"
 requires-python = ">=3.11"
 dependencies = [
 	"requests",
-	"jinja2",
 	"litellm",
 	"pyyaml",
 	"typer",

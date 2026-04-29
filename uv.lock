@@ -713,7 +713,6 @@ name = "labrats"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "jinja2" },
     { name = "litellm" },
     { name = "loguru" },
     { name = "pyyaml" },
@@ -724,7 +723,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "jinja2" },
     { name = "litellm" },
     { name = "loguru" },
     { name = "pyyaml" },

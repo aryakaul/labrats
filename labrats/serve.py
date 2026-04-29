@@ -14,7 +14,6 @@ from urllib.parse import unquote
 from loguru import logger
 
 import yaml
-from jinja2 import Environment, FileSystemLoader
 
 from labrats.db import (
     already_scraped,
@@ -57,7 +56,7 @@ from labrats.scraper import (
 from labrats.synthesis import score_cards
 
 PACKAGE_DIR = Path(__file__).resolve().parent
-TEMPLATE_DIR = PACKAGE_DIR / "templates"
+INDEX_HTML = PACKAGE_DIR / "templates" / "serve.html"
 STATIC_DIR = PACKAGE_DIR / "static"
 
 _STATIC_MIME = {
@@ -348,10 +347,9 @@ class ServeHandler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length)
         return json.loads(raw) if raw else {}
 
-    def _send_html(self, html):
-        body = html.encode()
+    def _send_html(self, body: bytes):
         self.send_response(200)
-        self.send_header("Content-Type", "text/html")
+        self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -428,12 +426,7 @@ class ServeHandler(BaseHTTPRequestHandler):
             self._send_static(path[len("/static/"):])
 
         elif path in ("/", ""):
-            env = Environment(
-                loader=FileSystemLoader(str(TEMPLATE_DIR)),
-                autoescape=True,
-            )
-            tmpl = env.get_template("serve.html.j2")
-            self._send_html(tmpl.render())
+            self._send_html(INDEX_HTML.read_bytes())
 
         else:
             self.send_error(404)
