@@ -56,7 +56,18 @@ from labrats.scraper import (
 )
 from labrats.synthesis import score_cards
 
-TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
+PACKAGE_DIR = Path(__file__).resolve().parent
+TEMPLATE_DIR = PACKAGE_DIR / "templates"
+STATIC_DIR = PACKAGE_DIR / "static"
+
+_STATIC_MIME = {
+    ".css": "text/css; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".ico": "image/x-icon",
+}
 
 
 # ── background run state ──
@@ -345,6 +356,30 @@ class ServeHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_static(self, rel_path: str):
+        """Serve a file from labrats/static/ with no-cache headers."""
+        # strip query string, then resolve and confine to STATIC_DIR
+        rel = rel_path.split("?", 1)[0].split("#", 1)[0]
+        try:
+            fpath = (STATIC_DIR / rel).resolve()
+            fpath.relative_to(STATIC_DIR.resolve())
+        except (ValueError, OSError):
+            self.send_error(404)
+            return
+        if not fpath.is_file():
+            self.send_error(404)
+            return
+        body = fpath.read_bytes()
+        mime = _STATIC_MIME.get(
+            fpath.suffix.lower(), "application/octet-stream",
+        )
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
     # ── GET ──
 
     def do_GET(self):
@@ -388,6 +423,9 @@ class ServeHandler(BaseHTTPRequestHandler):
 
         elif path == "/api/run/status":
             self._send_json(dict(_run_state))
+
+        elif path.startswith("/static/"):
+            self._send_static(path[len("/static/"):])
 
         elif path in ("/", ""):
             env = Environment(

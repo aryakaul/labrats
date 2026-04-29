@@ -2,25 +2,38 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
 build/
+dist/
+
+# Virtual envs
 .venv/
 venv/
 
 # Environment
 .env
+.env.*
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Output
 output/*
 !output/.gitkeep
 
-# Agent files
+# Local agent / assistant state
+.claude/
 AGENT*.md
 braindump.md
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store

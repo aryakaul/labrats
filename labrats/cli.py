@@ -3,11 +3,13 @@
 import asyncio
 import os
 import shutil
+import sys
 from datetime import date, timedelta
 from pathlib import Path
 
 import requests
 import typer
+from loguru import logger
 from rich import print as rprint
 
 from labrats.models import PersonaConfig
@@ -34,6 +36,29 @@ from labrats.scraper import (
 from labrats.synthesis import score_cards
 
 app = typer.Typer()
+
+
+def _configure_logging(verbose: bool) -> None:
+    logger.remove()
+    logger.add(
+        sys.stderr,
+        level="DEBUG" if verbose else "INFO",
+        format=(
+            "<green>{time:HH:mm:ss}</green> "
+            "<level>{level: <7}</level> {message}"
+        ),
+    )
+
+
+@app.callback()
+def _root(
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v",
+        help="Show DEBUG logs (default shows INFO and above).",
+    ),
+):
+    """labrats — personalized preprint triage."""
+    _configure_logging(verbose)
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 BUNDLED_DEFAULTS = PACKAGE_DIR / "defaults"
