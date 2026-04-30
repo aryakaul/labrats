@@ -157,6 +157,33 @@ def union_arxiv_cats(profiles: list[dict]) -> list[str]:
     return list({c for p in profiles for c in p.get("arxiv_categories", [])})
 
 
+def fetch_paper_by_doi(doi: str) -> Paper:
+    """Fetch a single paper by DOI; routes on arxiv: prefix vs. biorxiv."""
+    if doi.startswith("arxiv:"):
+        return _fetch_arxiv_by_id(doi[len("arxiv:"):])
+    return _fetch_biorxiv_by_doi(doi)
+
+
+def _fetch_biorxiv_by_doi(doi: str) -> Paper:
+    url = f"{BIORXIV_API}/{doi}/na/json"
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+    collection = resp.json().get("collection", [])
+    if not collection:
+        raise ValueError(f"No paper found for DOI: {doi}")
+    return _parse_paper(collection[0])
+
+
+def _fetch_arxiv_by_id(arxiv_id: str) -> Paper:
+    url = f"{ARXIV_API}?id_list={arxiv_id}"
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+    entries = ET.fromstring(resp.text).findall(f"{_ATOM}entry")
+    if not entries:
+        raise ValueError(f"No paper found for arxiv ID: {arxiv_id}")
+    return _parse_arxiv_entry(entries[0])
+
+
 def fetch_from_sources(
     start: str,
     end: str,

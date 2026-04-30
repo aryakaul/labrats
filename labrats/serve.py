@@ -271,6 +271,7 @@ def _background_run(config_dir, db_path, model, api_base, source):
             persona_prompt = (
                 profile.get("persona_prompt") or DEFAULT_PERSONA_PROMPT
             )
+            purpose = profile.get("purpose", "")
             to_eval = papers_needing_eval(
                 conn, db_papers, pname, persona_names,
             )
@@ -295,6 +296,7 @@ def _background_run(config_dir, db_path, model, api_base, source):
                 run_pipeline(
                     to_eval, personas, persona_prompt,
                     effective_model, api_base, on_progress,
+                    purpose=purpose,
                 )
             )
             for card in new_cards:

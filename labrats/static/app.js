@@ -672,6 +672,7 @@ function profileFormHTML(prof, idx, mode) {
 	const selArxiv = prof?.arxiv_categories || [];
 	const maxP = prof?.max_papers || 500;
 	const profMdl = prof?.model || '';
+	const purpose = prof?.purpose || '';
 	const personaPrompt = prof?.persona_prompt || '';
 	const assigned = prof?.personas || [];
 	const isUpdate = mode === 'update';
@@ -682,6 +683,11 @@ function profileFormHTML(prof, idx, mode) {
 		<div class="form-group">
 			<label>Name</label>
 			<input type="text" class="pr-name" value="${esc(name)}">
+		</div>
+		<div class="form-group">
+			<label>Purpose</label>
+			<textarea class="pr-purpose" rows="3">${esc(purpose)}</textarea>
+			<div class="form-hint">The 'why' — your research context, open questions, or what you're watching for. Passed to all personas.</div>
 		</div>
 		<div class="form-group">
 			<label>Keywords</label>
@@ -735,6 +741,7 @@ function renderProfiles() {
 
 function readProfileForm(container) {
 	const mdl = container.querySelector('.pr-model').value.trim();
+	const purpose = container.querySelector('.pr-purpose').value.trim();
 	const pp = container.querySelector('.pr-persona-prompt').value.trim();
 	const selectedPersonas = readChecked(container, '.pr-personas');
 	const data = {
@@ -746,6 +753,7 @@ function readProfileForm(container) {
 		max_papers: parseInt(container.querySelector('.pr-max').value, 10) || 500,
 	};
 	if (mdl) data.model = mdl;
+	if (purpose) data.purpose = purpose;
 	if (pp) data.persona_prompt = pp;
 	if (selectedPersonas.length) data.personas = selectedPersonas;
 	return data;

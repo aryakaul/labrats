@@ -1,6 +1,7 @@
 profiles:
   - name: CRISPR & Gene Editing
     max_papers: 5
+    purpose: ""
     persona_prompt: >
       You are a {role}. Read the following paper and evaluate it.
       Score each field using the full 1-10 range. Anchors:
@@ -25,6 +26,7 @@ profiles:
 
   - name: Neuroscience & Cognition
     max_papers: 5
+    purpose: ""
     persona_prompt: >
       You are a {role}. Read the following paper and evaluate it.
       Score each field using the full 1-10 range. Anchors:
@@ -55,6 +57,7 @@ profiles:
 
   - name: Structural Biology
     max_papers: 5
+    purpose: ""
     persona_prompt: >
       You are a {role}. Read the following paper and evaluate it.
       Score each field using the full 1-10 range. Anchors:

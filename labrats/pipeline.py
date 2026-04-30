@@ -12,10 +12,11 @@ async def evaluate_paper(
     persona_prompt: str,
     model: str,
     api_base: str | None = None,
+    purpose: str = "",
 ) -> PaperCard:
     """Evaluate a single paper with all personas concurrently."""
     tasks = [
-        run_persona(p, paper, persona_prompt, model, api_base)
+        run_persona(p, paper, persona_prompt, model, api_base, purpose)
         for p in personas
     ]
     tasks.append(summarize_abstract(paper, model, api_base))
@@ -30,13 +31,14 @@ async def run_pipeline(
     model: str,
     api_base: str | None = None,
     on_progress=None,
+    purpose: str = "",
 ) -> list[PaperCard]:
     """Evaluate papers sequentially. Calls on_progress(done, total) after each."""
     cards = []
     total = len(papers)
     for i, paper in enumerate(papers, start=1):
         card = await evaluate_paper(
-            paper, personas, persona_prompt, model, api_base,
+            paper, personas, persona_prompt, model, api_base, purpose,
         )
         cards.append(card)
         if on_progress:

@@ -155,8 +155,15 @@ def _build_messages(
     persona: PersonaConfig,
     paper: Paper,
     persona_prompt: str,
+    purpose: str = "",
 ) -> list[dict]:
     system = persona_prompt.format(role=persona.role)
+    if purpose:
+        system += (
+            f"\n\nThe researcher tracking this profile is interested in: "
+            f"{purpose}\n"
+            f"Factor this into your relevance score in particular."
+        )
     fields_spec = ", ".join(persona.scored_fields)
     user_msg = (
         f"Title: {paper.title}\n\n"
@@ -231,10 +238,11 @@ async def run_persona(
     persona_prompt: str,
     model: str,
     api_base: str | None = None,
+    purpose: str = "",
 ) -> PersonaResult:
     """Call the LLM as this persona and parse the scored JSON response."""
     effective_model = persona.model or model
-    messages = _build_messages(persona, paper, persona_prompt)
+    messages = _build_messages(persona, paper, persona_prompt, purpose)
     kwargs = _completion_kwargs(
         effective_model, messages, api_base,
         response_format={"type": "json_object"},

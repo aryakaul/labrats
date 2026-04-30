@@ -30,6 +30,7 @@ from labrats.personas import (
 from labrats.pipeline import run_pipeline
 from labrats.scraper import (
     fetch_from_sources,
+    fetch_paper_by_doi,
     filter_by_topics,
     union_arxiv_cats,
 )
@@ -355,6 +356,10 @@ def test(
     source: str = typer.Option("all", help=_SRC_HELP),
     config_dir: Path = typer.Option(None, help=_CFG_HELP),
     api_base: str = typer.Option(None, help=_API_HELP),
+    paper_doi: str = typer.Option(
+        None, "--paper-doi",
+        help="Skip scrape; test against this DOI (prefix arxiv: for arxiv).",
+    ),
 ):
     """Run the full pipeline on a single paper (smoke test)."""
     cfg = config_dir or _config_dir()
@@ -362,33 +367,39 @@ def test(
     model = resolve_model(model, cfg)
     profiles = load_profiles(cfg)
 
-    # Preflight: verify model access before scraping
+    # Preflight: verify model access before any network call
     all_personas = []
     for p in profiles:
         pnames = p.get("personas")
         all_personas += [x for x in load_personas(cfg, pnames) if x.enabled]
     _preflight_check(model, all_personas, api_base, cfg, profiles)
 
-    fetch_topics = {"arxiv_categories": union_arxiv_cats(profiles)}
-    today = date.today()
-    start = str(today - timedelta(days=1))
-    end = str(today)
+    if paper_doi:
+        try:
+            paper = fetch_paper_by_doi(paper_doi)
+        except Exception as e:
+            rprint(f"[red]Could not fetch DOI {paper_doi}:[/red] {e}")
+            raise typer.Exit(1)
+        matched_profile = profiles[0]
+    else:
+        fetch_topics = {"arxiv_categories": union_arxiv_cats(profiles)}
+        today = date.today()
+        start = str(today - timedelta(days=1))
+        end = str(today)
 
-    papers = _fetch_and_warn(start, end, source, fetch_topics)
+        papers = _fetch_and_warn(start, end, source, fetch_topics)
 
-    # Find first profile with matching papers
-    matched_profile = None
-    matched_papers = []
-    for profile in profiles:
-        filtered = filter_by_topics(papers, profile)
-        if filtered:
-            matched_profile = profile
-            matched_papers = filtered
-            break
+        matched_profile = None
+        for profile in profiles:
+            filtered = filter_by_topics(papers, profile)
+            if filtered:
+                matched_profile = profile
+                paper = filtered[0]
+                break
 
-    if not matched_profile:
-        rprint("[yellow]No papers to test with.[/yellow]")
-        raise typer.Exit()
+        if not matched_profile:
+            rprint("[yellow]No papers to test with.[/yellow]")
+            raise typer.Exit()
 
     pname = matched_profile["name"]
     pnames = matched_profile.get("personas")
@@ -397,7 +408,7 @@ def test(
     persona_prompt = (
         matched_profile.get("persona_prompt") or DEFAULT_PERSONA_PROMPT
     )
-    paper = matched_papers[0]
+    purpose = matched_profile.get("purpose", "")
 
     rprint(
         f"[bold]Profile:[/bold] {pname}\n"
@@ -406,6 +417,7 @@ def test(
     cards = asyncio.run(
         run_pipeline(
             [paper], personas, persona_prompt, effective_model, api_base,
+            purpose=purpose,
         )
     )
     cards = score_cards(cards)
