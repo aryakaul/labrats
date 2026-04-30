@@ -177,7 +177,7 @@ function showConfig() {
 }
 
 function showConfigTab(name) {
-	['personas', 'profiles', 'settings'].forEach(t => {
+	['personas', 'profiles', 'settings', 'view'].forEach(t => {
 		$(`cpanel-${t}`)?.classList.toggle('active', t === name);
 	});
 	$$('.config-tab-btn').forEach(btn =>
@@ -723,7 +723,7 @@ function profileFormHTML(prof, idx, mode) {
 			</div>
 		</div>
 		<div class="form-group">
-			<label>Personas</label>
+			<label>LabRats</label>
 			<div class="check-grid pr-personas">
 				${checkboxesHTML(state.personas, assigned, p => p.stem, p => p.name)}
 			</div>
@@ -916,6 +916,17 @@ actions.saveApiKeys = async () => {
 	renderSettings();
 };
 
+/* ── view tab ── */
+
+// Apply persisted dark mode before first paint.
+if (localStorage.getItem('darkMode')) document.body.classList.add('dark');
+
+actions.toggleDarkMode = (input) => {
+	document.body.classList.toggle('dark', input.checked);
+	localStorage.setItem('darkMode', input.checked ? '1' : '');
+};
+
+
 /* ── init ── */
 
 async function init() {
@@ -927,6 +938,9 @@ async function init() {
 		api('GET', '/api/digest'),
 	]);
 	Object.assign(state, { personas, profiles, settings, models, digestProfiles });
+
+	const dmToggle = document.getElementById('dark-mode-toggle');
+	if (dmToggle) dmToggle.checked = !!localStorage.getItem('darkMode');
 
 	renderPersonas();
 	renderProfiles();
