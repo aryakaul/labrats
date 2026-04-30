@@ -52,7 +52,7 @@ from labrats.scraper import (
     filter_by_topics,
     union_arxiv_cats,
 )
-from labrats.synthesis import score_cards
+from labrats.synthesis import parse_llm_summary, score_cards
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 INDEX_HTML = PACKAGE_DIR / "templates" / "serve.html"
@@ -133,7 +133,7 @@ def _card_to_dict(card):
         "avg_score": card.avg_score,
         "disputed": card.disputed,
         "disputed_field": card.disputed_field,
-        "llm_summary": card.llm_summary,
+        "llm_summary": parse_llm_summary(card.llm_summary),
     }
 
 

@@ -10,6 +10,7 @@ body {
 	overflow: hidden;
 }
 header {
+	position: relative;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
@@ -543,6 +544,7 @@ header {
 	position: absolute;
 	top: 0;
 	left: 0;
+	width: 0;
 	height: 3px;
 	background: #2e7d32;
 	transition: width 0.3s;
@@ -557,6 +559,17 @@ header {
 	padding: 0.25rem 0;
 	user-select: none;
 }
+
+.section-head { margin-bottom: 0.75rem; }
+.section-title { margin-bottom: 0.5rem; }
+.section-card { margin-bottom: 1rem; }
+.api-keys-hint { margin: 0.75rem 0; }
+.toggle-row {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+}
+.toggle-label { font-size: 0.83rem; }
 
 .card-aside {
 	color: #666;

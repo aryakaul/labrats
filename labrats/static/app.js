@@ -15,7 +15,6 @@ const state = {
 	personaData: {},         // per-card persona detail keyed by 'pd-<cid>-<i>'
 };
 
-let _dlCounter = 0;
 let _cardId = 0;
 
 const BIORXIV_CATEGORIES = [
@@ -110,13 +109,15 @@ function activeModelOptions() {
 }
 
 function modelInputHTML(cls, value) {
-	const id = `dl-${++_dlCounter}`;
-	const opts = activeModelOptions()
+	return `<input type="text" class="${cls}" value="${esc(value)}"
+		       list="model-options" autocomplete="off">`;
+}
+
+function refreshModelOptions() {
+	const dl = $('model-options');
+	if (!dl) return;
+	dl.innerHTML = activeModelOptions()
 		.map(m => `<option value="${esc(m)}">`).join('');
-	return `
-		<input type="text" class="${cls}" value="${esc(value)}"
-		       list="${id}" autocomplete="off">
-		<datalist id="${id}">${opts}</datalist>`;
 }
 
 function checkboxesHTML(items, selected, valueFn, labelFn) {
@@ -209,6 +210,7 @@ async function loadDigestCards(profile) {
 
 function renderDigestCards(profile, cards) {
 	state.personaData = {};
+	_cardId = 0;
 	closePersonaPanel();
 	if (!cards || !cards.length) {
 		$('digest-content').innerHTML = `
@@ -232,25 +234,12 @@ function renderDigestCards(profile, cards) {
 	$('digest-content').innerHTML = controls + cards.map(renderOneCard).join('');
 }
 
-function parseLlmSummary(text) {
-	const sections = ['Background', 'Methods', 'Results', 'Discussion'];
-	const out = {};
-	sections.forEach((label, i) => {
-		const next = sections[i + 1];
-		const tail = next ? `(?=${next}:)` : '$';
-		const re = new RegExp(`${label}:\\s*([\\s\\S]*?)${tail}`, 'i');
-		const m = text.match(re);
-		out[label] = m ? m[1].trim() : '';
-	});
-	return out;
-}
-
 function renderAbstractSection(card, cid) {
 	const abs = `<p class="abstract" id="abs-${cid}">${esc(card.paper.abstract)}</p>`;
-	if (!card.llm_summary) return abs;
-	const parsed = parseLlmSummary(card.llm_summary);
+	const summary = card.llm_summary;
+	if (!summary || !Object.keys(summary).length) return abs;
 	const inner = ['Background', 'Methods', 'Results', 'Discussion']
-		.map(l => `<span class="summary-label">${l}:</span> ${esc(parsed[l] || 'Not stated.')}`)
+		.map(l => `<span class="summary-label">${l}:</span> ${esc(summary[l] || 'Not stated.')}`)
 		.join('<br>');
 	return `
 		<div class="abstract-tabs">
@@ -913,6 +902,7 @@ actions.saveApiKeys = async () => {
 	]);
 	state.settings = s;
 	state.models = m;
+	refreshModelOptions();
 	renderSettings();
 };
 
@@ -942,6 +932,7 @@ async function init() {
 	const dmToggle = document.getElementById('dark-mode-toggle');
 	if (dmToggle) dmToggle.checked = !!localStorage.getItem('darkMode');
 
+	refreshModelOptions();
 	renderPersonas();
 	renderProfiles();
 	renderSettings();

@@ -5,6 +5,7 @@ from labrats.synthesis import (
 	TENSION_THRESHOLD,
 	compute_avg_score,
 	compute_tension,
+	parse_llm_summary,
 	score_cards,
 )
 
@@ -92,6 +93,32 @@ def test_score_cards_sets_disputed_when_above_threshold():
 	assert card.disputed is True
 	assert card.disputed_field == "novelty"
 	assert card.tension > TENSION_THRESHOLD
+
+
+def test_parse_llm_summary_extracts_all_four_sections():
+	text = (
+		"Background: A. study.\n"
+		"Methods: B. method.\n"
+		"Results: C. result.\n"
+		"Discussion: D. discussion."
+	)
+	out = parse_llm_summary(text)
+	assert out["Background"] == "A. study."
+	assert out["Methods"] == "B. method."
+	assert out["Results"] == "C. result."
+	assert out["Discussion"] == "D. discussion."
+
+
+def test_parse_llm_summary_fills_missing_with_placeholder():
+	out = parse_llm_summary("Background: just this one.")
+	assert out["Background"] == "just this one."
+	assert out["Methods"] == "Not stated."
+	assert out["Results"] == "Not stated."
+	assert out["Discussion"] == "Not stated."
+
+
+def test_parse_llm_summary_empty_returns_empty_dict():
+	assert parse_llm_summary("") == {}
 
 
 def test_score_cards_consensus_not_disputed():

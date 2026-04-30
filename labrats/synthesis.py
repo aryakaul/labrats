@@ -1,10 +1,33 @@
 """Score and rank paper cards by avg score and cross-persona tension."""
 
+import re
 import statistics
 
 from labrats.models import PaperCard
 
 TENSION_THRESHOLD = 1.5
+
+_SUMMARY_SECTIONS = ("Background", "Methods", "Results", "Discussion")
+_SUMMARY_RE = re.compile(
+    r"(Background|Methods|Results|Discussion):\s*([\s\S]*?)"
+    r"(?=(?:Background|Methods|Results|Discussion):|$)",
+    re.IGNORECASE,
+)
+
+
+def parse_llm_summary(text: str) -> dict[str, str]:
+    """Split a 'Background:... Methods:...' summary into a dict.
+
+    Returns {section: text} for every section, with 'Not stated.' for any
+    section the LLM omitted. Returns an empty dict on empty input.
+    """
+    if not text:
+        return {}
+    found = {
+        m.group(1).capitalize(): m.group(2).strip()
+        for m in _SUMMARY_RE.finditer(text)
+    }
+    return {s: found.get(s) or "Not stated." for s in _SUMMARY_SECTIONS}
 
 
 def compute_tension(card: PaperCard) -> tuple[float, str]:
