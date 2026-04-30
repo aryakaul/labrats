@@ -124,6 +124,13 @@ def enforce_cap(conn: sqlite3.Connection, profile: str, max_papers: int) -> None
     conn.commit()
 
 
+def paper_count(conn: sqlite3.Connection, profile: str) -> int:
+    """Number of papers stored for a profile."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM papers WHERE profile = ?", (profile,),
+    ).fetchone()[0]
+
+
 def load_papers(conn: sqlite3.Connection, profile: str) -> list[Paper]:
     """Load all papers for a profile, newest first."""
     rows = conn.execute(

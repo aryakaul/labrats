@@ -8,7 +8,7 @@ import yaml
 from litellm import acompletion
 
 from labrats.models import Paper, PersonaConfig, PersonaResult
-from labrats.models_registry import resolve_local_model
+from labrats.models_registry import PROVIDER_KEYS, resolve_local_model
 
 FALLBACK_MODEL = "openai/gpt-4o-mini"
 
@@ -103,6 +103,7 @@ def load_personas(
                 scored_fields=data["scored_fields"],
                 model=data.get("model"),
                 enabled=data.get("enabled", True),
+                stem=path.stem,
             )
         )
     return personas
@@ -196,14 +197,17 @@ def _completion_kwargs(
     api_base: str | None,
     **extra,
 ) -> dict:
-    """Build litellm kwargs, auto-routing bare model names to local APIs."""
+    """Build litellm kwargs, auto-routing non-cloud model names to local APIs."""
     kwargs = {"model": model, "messages": messages, **extra}
-    # If no provider prefix and no explicit api_base, probe local endpoints
-    if api_base is None and "/" not in model:
+    provider = model.split("/", 1)[0] if "/" in model else ""
+    is_cloud = provider in PROVIDER_KEYS
+    # No explicit api_base + not a known cloud provider → probe local
+    if api_base is None and not is_cloud:
         api_base = resolve_local_model(model)
     if api_base is not None:
-        # litellm needs "openai/" prefix to route to OpenAI-compatible APIs
-        if "/" not in model:
+        # litellm needs an "openai/" prefix to route to an OpenAI-compatible
+        # local endpoint; the rest is sent verbatim as the model id.
+        if not model.startswith("openai/"):
             kwargs["model"] = f"openai/{model}"
         kwargs["api_base"] = api_base
         kwargs["api_key"] = "sk-local"

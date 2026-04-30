@@ -13,8 +13,6 @@ from urllib.parse import unquote
 
 from loguru import logger
 
-import yaml
-
 from labrats.db import (
     already_scraped,
     enforce_cap,
@@ -25,6 +23,7 @@ from labrats.db import (
     log_scrape,
     open_db,
     papers_needing_eval,
+    paper_count,
     upsert_llm_summary,
     upsert_papers,
     upsert_results,
@@ -94,21 +93,18 @@ def _reset_run_state():
 
 
 def _list_personas_raw(config_dir):
-    """Read persona YAML files and return as plain dicts for the API."""
-    persona_dir = config_dir / "personas"
-    result = []
-    for path in sorted(persona_dir.glob("*.yaml")):
-        with open(path) as f:
-            data = yaml.safe_load(f)
-        result.append({
-            "stem": path.stem,
-            "name": data["name"],
-            "role": data["role"],
-            "scored_fields": data["scored_fields"],
-            "model": data.get("model", ""),
-            "enabled": data.get("enabled", True),
-        })
-    return result
+    """Return all personas as JSON-safe dicts for the API."""
+    return [
+        {
+            "stem": p.stem,
+            "name": p.name,
+            "role": p.role,
+            "scored_fields": p.scored_fields,
+            "model": p.model or "",
+            "enabled": p.enabled,
+        }
+        for p in load_personas(config_dir)
+    ]
 
 
 def _card_to_dict(card):
@@ -187,11 +183,8 @@ def _background_run(config_dir, db_path, model, api_base, source):
             # returning profiles scrape from their last run to today.
             first_time, returning = [], []
             for p in needs_scrape:
-                count = conn.execute(
-                    "SELECT COUNT(*) FROM papers WHERE profile = ?",
-                    (p["name"],),
-                ).fetchone()[0]
-                (first_time if count == 0 else returning).append(p)
+                bucket = first_time if paper_count(conn, p["name"]) == 0 else returning
+                bucket.append(p)
 
             if first_time:
                 names = ", ".join(p["name"] for p in first_time)
@@ -438,23 +431,14 @@ class ServeHandler(BaseHTTPRequestHandler):
         conn = open_db(self.db_path)
         conn.execute("PRAGMA journal_mode=WAL")
         profiles = load_profiles(self.config_dir)
-        result = []
-        for p in profiles:
-            pname = p["name"]
-            count = conn.execute(
-                "SELECT COUNT(*) FROM papers WHERE profile = ?",
-                (pname,),
-            ).fetchone()[0]
-            row = conn.execute(
-                "SELECT scraped_on FROM scrape_log "
-                "WHERE profile = ? ORDER BY scraped_on DESC LIMIT 1",
-                (pname,),
-            ).fetchone()
-            result.append({
-                "name": pname,
-                "paper_count": count,
-                "last_scraped": row[0] if row else None,
-            })
+        result = [
+            {
+                "name": p["name"],
+                "paper_count": paper_count(conn, p["name"]),
+                "last_scraped": last_scraped(conn, p["name"]),
+            }
+            for p in profiles
+        ]
         conn.close()
         self._send_json(result)
 

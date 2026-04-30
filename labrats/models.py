@@ -23,6 +23,7 @@ class PersonaConfig:
     scored_fields: list[str]
     model: str | None = None
     enabled: bool = True
+    stem: str = ""  # filename stem (e.g. "critical_methodologist")
 
 
 @dataclass

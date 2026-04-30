@@ -99,3 +99,30 @@ def test_completion_kwargs_passes_extra_through(monkeypatch):
 		"openai/gpt-4o-mini", [], api_base=None, temperature=0.7,
 	)
 	assert kwargs["temperature"] == 0.7
+
+
+def test_completion_kwargs_hf_style_name_probes_local(monkeypatch):
+	# HF-style names like "meta-llama/..." aren't a known cloud provider,
+	# so they should be probed against local endpoints.
+	probed = []
+	def fake_resolve(m):
+		probed.append(m)
+		return "http://localhost:1234/v1"
+	monkeypatch.setattr(personas, "resolve_local_model", fake_resolve)
+	kwargs = _completion_kwargs(
+		"meta-llama/Llama-3.1-8B-Instruct", [], api_base=None,
+	)
+	assert probed == ["meta-llama/Llama-3.1-8B-Instruct"]
+	assert kwargs["model"] == "openai/meta-llama/Llama-3.1-8B-Instruct"
+	assert kwargs["api_base"] == "http://localhost:1234/v1"
+
+
+def test_completion_kwargs_cloud_provider_skips_local_probe(monkeypatch):
+	# "openai/..." is a known cloud provider — never probe local.
+	def boom(m):
+		raise AssertionError("should not probe")
+	monkeypatch.setattr(personas, "resolve_local_model", boom)
+	kwargs = _completion_kwargs(
+		"openai/gpt-4o-mini", [], api_base=None,
+	)
+	assert "api_base" not in kwargs
