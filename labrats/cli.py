@@ -28,6 +28,7 @@ from labrats.personas import (
     resolve_model,
 )
 from labrats.pipeline import run_pipeline
+from labrats.runner import run_all_profiles
 from labrats.scraper import (
     fetch_from_sources,
     fetch_paper_by_doi,
@@ -345,6 +346,34 @@ def preview(
         for paper in filtered[:3]:
             rprint(f"  · {paper.title[:60]}")
         rprint("")
+
+
+@app.command()
+def run(
+    model: str = typer.Option(None, help=_MDL_HELP),
+    source: str = typer.Option("all", help=_SRC_HELP),
+    config_dir: Path = typer.Option(None, help=_CFG_HELP),
+    db_path: Path = typer.Option(None, help=_DB_HELP),
+    api_base: str = typer.Option(None, help=_API_HELP),
+):
+    """Fetch and evaluate all profiles (headless, cron-friendly)."""
+    cfg = config_dir or _config_dir()
+    _require_config(cfg)
+    mdl = resolve_model(model, cfg)
+    db = db_path or _db_path()
+
+    profiles = load_profiles(cfg)
+    all_personas = []
+    for p in profiles:
+        pnames = p.get("personas")
+        all_personas += [x for x in load_personas(cfg, pnames) if x.enabled]
+    _preflight_check(mdl, all_personas, api_base, cfg, profiles)
+
+    try:
+        run_all_profiles(cfg, db, mdl, api_base, source)
+    except Exception as e:
+        rprint(f"[red]Run failed:[/red] {e}")
+        raise typer.Exit(1)
 
 
 @app.command()

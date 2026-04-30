@@ -1,12 +1,9 @@
 """Unified labrats web server — digest + config + run."""
 
-import asyncio
 import json
 import logging
-import os
 import threading
 import webbrowser
-from datetime import date, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote
@@ -14,29 +11,20 @@ from urllib.parse import unquote
 from loguru import logger
 
 from labrats.db import (
-    already_scraped,
-    enforce_cap,
     last_scraped,
     load_llm_summary,
     load_papers,
     load_results,
-    log_scrape,
     open_db,
-    papers_needing_eval,
     paper_count,
-    upsert_llm_summary,
-    upsert_papers,
-    upsert_results,
 )
 from labrats.models import PaperCard
 from labrats.models_registry import (
     PROVIDER_DOCS,
-    PROVIDER_KEYS,
     discover_local,
     list_cloud_models,
 )
 from labrats.personas import (
-    DEFAULT_PERSONA_PROMPT,
     delete_persona,
     load_personas,
     load_profiles,
@@ -46,12 +34,7 @@ from labrats.personas import (
     save_profiles,
     save_settings,
 )
-from labrats.pipeline import run_pipeline
-from labrats.scraper import (
-    fetch_from_sources,
-    filter_by_topics,
-    union_arxiv_cats,
-)
+from labrats.runner import run_all_profiles
 from labrats.synthesis import parse_llm_summary, score_cards
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -154,157 +137,17 @@ def _mask_api_keys(keys: dict) -> dict:
 
 
 def _background_run(config_dir, db_path, model, api_base, source):
-    """Execute the full scrape-and-evaluate pipeline in a background thread.
-
-    Updates _run_state as it progresses so the UI can poll for status.
-    """
+    """Execute the full pipeline in a background thread, updating _run_state."""
     try:
-        _run_state["phase"] = "scraping"
-        today_dt = date.today()
-        today = str(today_dt)
-        start = str(today_dt - timedelta(days=1))
-        week_start = str(today_dt - timedelta(days=7))
-        end = today
-
-        profiles = load_profiles(config_dir)
-        conn = open_db(db_path)
-        conn.execute("PRAGMA journal_mode=WAL")
-
-        # Only scrape profiles that haven't been fetched today
-        needs_scrape = [
-            p for p in profiles
-            if not already_scraped(conn, p["name"], today)
-        ]
-
-        if not needs_scrape:
-            logger.info("scraping: all profiles already scraped today")
-        else:
-            # First-time profiles (no papers in DB) get a full week;
-            # returning profiles scrape from their last run to today.
-            first_time, returning = [], []
-            for p in needs_scrape:
-                bucket = first_time if paper_count(conn, p["name"]) == 0 else returning
-                bucket.append(p)
-
-            if first_time:
-                names = ", ".join(p["name"] for p in first_time)
-                logger.info(
-                    f"scraping: {len(first_time)} new profile(s)"
-                    f" — backfill {week_start} → {end}: {names}"
-                )
-            if returning:
-                names = ", ".join(p["name"] for p in returning)
-                logger.info(
-                    f"scraping: {len(returning)} returning profile(s): {names}"
-                )
-
-            # Use the earliest last-scrape across returning profiles
-            # so no gap is missed; fall back to yesterday if unknown.
-            if returning:
-                last_dates = [
-                    last_scraped(conn, p["name"]) for p in returning
-                ]
-                returning_start = min(
-                    (d for d in last_dates if d), default=start,
-                )
-            else:
-                returning_start = start
-
-            for group, fetch_start in (
-                (first_time, week_start),
-                (returning, returning_start),
-            ):
-                if not group:
-                    continue
-                fetch_topics = {
-                    "arxiv_categories": union_arxiv_cats(group),
-                }
-                logger.info(f"fetching from {source}  ({fetch_start} → {end})")
-                all_papers, errors = fetch_from_sources(
-                    fetch_start, end, source, fetch_topics,
-                )
-                for err in errors:
-                    logger.warning(f"source error: {err}")
-                logger.info(f"fetched {len(all_papers)} papers total")
-                for profile in group:
-                    pname = profile["name"]
-                    cap = profile.get("max_papers") or 500
-                    filtered = filter_by_topics(all_papers, profile)
-                    logger.info(
-                        f"  {pname:<30}  "
-                        f"{len(filtered)} papers after filter (cap {cap})"
-                    )
-                    upsert_papers(conn, filtered, pname, today)
-                    enforce_cap(conn, pname, cap)
-                    log_scrape(conn, pname, today)
-
-        # Evaluate each profile's papers with its personas
-        _run_state["phase"] = "evaluating"
-        logger.info("─" * 48)
-
-        for profile in profiles:
-            pname = profile["name"]
-            _run_state["profile"] = pname
-            pnames = profile.get("personas")
-            personas = [
-                p for p in load_personas(config_dir, pnames)
-                if p.enabled
-            ]
-            if not personas:
-                logger.warning(f"  {pname}: no enabled personas — skipping")
-                continue
-
-            db_papers = load_papers(conn, pname)
-            if not db_papers:
-                logger.info(f"  {pname}: no papers in DB — skipping")
-                continue
-
-            persona_names = [p.name for p in personas]
-            effective_model = profile.get("model") or model
-            persona_prompt = (
-                profile.get("persona_prompt") or DEFAULT_PERSONA_PROMPT
-            )
-            purpose = profile.get("purpose", "")
-            to_eval = papers_needing_eval(
-                conn, db_papers, pname, persona_names,
-            )
-            if not to_eval:
-                logger.info(
-                    f"  {pname}: all {len(db_papers)} papers already evaluated"
-                )
-                continue
-
-            logger.info(
-                f"  {pname}: evaluating {len(to_eval)}/{len(db_papers)}"
-                f" papers  ×  {len(personas)} personas  [{effective_model}]"
-            )
-            _run_state["progress"] = {"completed": 0, "total": len(to_eval)}
-
-            def on_progress(done, total, _pname=pname):
-                _run_state["progress"] = {"completed": done, "total": total}
-                paper_title = to_eval[done - 1].title
-                logger.info(f"    [{done}/{total}] {paper_title[:72]}")
-
-            new_cards = asyncio.run(
-                run_pipeline(
-                    to_eval, personas, persona_prompt,
-                    effective_model, api_base, on_progress,
-                    purpose=purpose,
-                )
-            )
-            for card in new_cards:
-                upsert_results(conn, card.paper.doi, pname, card.results)
-                if card.llm_summary:
-                    upsert_llm_summary(conn, card.paper.doi, card.llm_summary)
-
-            logger.info(f"  {pname}: done")
-
-        conn.close()
-        logger.info("─" * 48)
-        logger.info("run complete")
-        _run_state["phase"] = "done"
+        run_all_profiles(
+            config_dir, db_path, model, api_base, source,
+            on_phase=lambda p: _run_state.update({"phase": p}),
+            on_profile=lambda n: _run_state.update({"profile": n}),
+            on_progress=lambda done, total: _run_state.update(
+                {"progress": {"completed": done, "total": total}}
+            ),
+        )
         _run_state["status"] = "done"
-
     except Exception as e:
         logger.exception(f"run failed: {e}")
         _run_state["status"] = "error"
@@ -509,22 +352,10 @@ class ServeHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "already running"}, 409)
             return
         _reset_run_state()
-
         model = resolve_model(self.model, self.config_dir)
-
-        # Inject saved API keys into environment for litellm
-        api_keys = load_settings(self.config_dir).get("api_keys", {})
-        for provider, env_var in PROVIDER_KEYS.items():
-            val = api_keys.get(provider, "")
-            if val and not os.environ.get(env_var):
-                os.environ[env_var] = val
-
         t = threading.Thread(
             target=_background_run,
-            args=(
-                self.config_dir, self.db_path,
-                model, self.api_base, self.source,
-            ),
+            args=(self.config_dir, self.db_path, model, self.api_base, self.source),
             daemon=True,
         )
         t.start()
