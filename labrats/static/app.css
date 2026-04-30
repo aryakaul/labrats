@@ -235,7 +235,6 @@ header {
 	display: flex;
 	gap: 0.35rem;
 	flex-wrap: wrap;
-	flex-shrink: 0;
 }
 .badge {
 	font-size: 0.73rem;
@@ -753,7 +752,6 @@ body.dark .config-tab-btn.active {
 	color: #e8e8e8;
 	border-bottom-color: #e8e8e8;
 }
-body.dark .config-panel { }
 body.dark .edit-form { border-color: #333; }
 body.dark .form-group > label { color: #777; }
 body.dark .form-group input,

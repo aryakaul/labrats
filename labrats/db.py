@@ -2,7 +2,7 @@
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from labrats.models import Paper, PersonaResult
@@ -108,23 +108,18 @@ def enforce_cap(conn: sqlite3.Connection, profile: str, max_papers: int) -> None
     """Delete oldest papers beyond the per-profile cap."""
     if not max_papers:
         return
-    rows = conn.execute(
+    keep_q = (
         "SELECT doi FROM papers WHERE profile = ? "
-        "ORDER BY date DESC, fetched_at DESC LIMIT ?",
-        (profile, max_papers),
-    ).fetchall()
-    if not rows:
-        return
-    keep = tuple(r[0] for r in rows)
-    if len(keep) < max_papers:
-        return  # under cap, nothing to trim
-    ph = ",".join("?" * len(keep))
-    args = (profile, *keep)
+        "ORDER BY date DESC, fetched_at DESC LIMIT ?"
+    )
+    args = (profile, profile, max_papers)
     conn.execute(
-        f"DELETE FROM results WHERE profile = ? AND doi NOT IN ({ph})", args,
+        f"DELETE FROM results WHERE profile = ? AND doi NOT IN ({keep_q})",
+        args,
     )
     conn.execute(
-        f"DELETE FROM papers WHERE profile = ? AND doi NOT IN ({ph})", args,
+        f"DELETE FROM papers WHERE profile = ? AND doi NOT IN ({keep_q})",
+        args,
     )
     conn.commit()
 
@@ -176,7 +171,7 @@ def upsert_results(
     persona_results: list[PersonaResult],
 ) -> None:
     """Insert or update persona evaluation results."""
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     conn.executemany(
         """
         INSERT OR REPLACE INTO results

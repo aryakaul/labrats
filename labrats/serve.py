@@ -70,10 +70,10 @@ _STATIC_MIME = {
 
 
 # ── background run state ──
-# Shared mutable dict protected by _run_lock. The web UI polls
-# GET /api/run/status to read this state and update the progress bar.
+# Single writer (the background thread) + single reader pattern (the
+# polling /api/run/status endpoint reads dict snapshots). Status
+# transitions are checked in _start_run before spawning a thread.
 
-_run_lock = threading.Lock()
 _run_state = {
     "status": "idle",       # idle | running | done | error
     "phase": "",            # scraping | evaluating | done
@@ -164,8 +164,8 @@ def _background_run(config_dir, db_path, model, api_base, source):
     """
     try:
         _run_state["phase"] = "scraping"
-        today = str(date.today())
         today_dt = date.today()
+        today = str(today_dt)
         start = str(today_dt - timedelta(days=1))
         week_start = str(today_dt - timedelta(days=7))
         end = today
@@ -521,11 +521,10 @@ class ServeHandler(BaseHTTPRequestHandler):
 
     def _start_run(self):
         """Kick off the background pipeline and return immediately."""
-        with _run_lock:
-            if _run_state["status"] == "running":
-                self._send_json({"error": "already running"}, 409)
-                return
-            _reset_run_state()
+        if _run_state["status"] == "running":
+            self._send_json({"error": "already running"}, 409)
+            return
+        _reset_run_state()
 
         model = resolve_model(self.model, self.config_dir)
 

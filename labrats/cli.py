@@ -179,9 +179,6 @@ def _fetch_and_warn(start, end, source, topics):
     papers, errors = fetch_from_sources(start, end, source, topics)
     for err in errors:
         rprint(f"[yellow]Warning — {err}[/yellow]")
-    if not papers and errors:
-        rprint("[red]All sources failed.[/red]")
-        raise typer.Exit(1)
     return papers
 
 
