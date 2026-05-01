@@ -88,6 +88,21 @@
                     data-action="saveDefaultModel">Save</button>
           </div>
         </div>
+        <div class="card section-card">
+          <div class="card-title section-head">Auto-run</div>
+          <p class="card-meta section-head">
+            When you open labrats, automatically run if the last run
+            was longer ago than this. Set to 0 to disable.</p>
+          <div class="form-group">
+            <label>Hours since last run</label>
+            <input type="number" id="auto-run-hours" min="0" step="1">
+          </div>
+          <div class="card-meta" id="last-run-at-meta"></div>
+          <div class="btn-row">
+            <button class="btn btn-primary"
+                    data-action="saveAutoRun">Save</button>
+          </div>
+        </div>
         <div class="card">
           <details id="api-keys-details">
             <summary class="api-keys-summary">API Keys</summary>

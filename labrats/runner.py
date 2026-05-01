@@ -9,6 +9,7 @@ from loguru import logger
 
 from labrats.db import (
     already_scraped,
+    delete_persona_result,
     enforce_cap,
     last_scraped,
     load_papers,
@@ -195,3 +196,62 @@ def run_all_profiles(
     logger.info("─" * 48)
     logger.info("run complete")
     _phase("done")
+
+
+def rerun_paper(
+    config_dir: Path,
+    db_path: Path,
+    model: str,
+    api_base: str | None,
+    doi: str,
+    profile_name: str,
+    persona_name: str,
+) -> None:
+    """Re-evaluate a single paper with one persona, replacing its result."""
+    api_keys = load_settings(config_dir).get("api_keys", {})
+    for provider, env_var in PROVIDER_KEYS.items():
+        val = api_keys.get(provider, "")
+        if val and not os.environ.get(env_var):
+            os.environ[env_var] = val
+
+    conn = open_db(db_path)
+    conn.execute("PRAGMA journal_mode=WAL")
+
+    papers = load_papers(conn, profile_name)
+    paper = next((p for p in papers if p.doi == doi), None)
+    if not paper:
+        conn.close()
+        raise ValueError(f"paper {doi!r} not found in profile {profile_name!r}")
+
+    profiles = load_profiles(config_dir)
+    profile = next((p for p in profiles if p["name"] == profile_name), None)
+    if not profile:
+        conn.close()
+        raise ValueError(f"profile {profile_name!r} not found")
+
+    pnames = profile.get("personas")
+    personas = [
+        p for p in load_personas(config_dir, pnames)
+        if p.enabled and p.name == persona_name
+    ]
+    if not personas:
+        conn.close()
+        raise ValueError(f"persona {persona_name!r} not found or not enabled")
+
+    effective_model = profile.get("model") or model
+    persona_prompt = profile.get("persona_prompt") or DEFAULT_PERSONA_PROMPT
+    purpose = profile.get("purpose", "")
+
+    logger.info(f"rerun: {persona_name} on {paper.title[:60]}  [{effective_model}]")
+    delete_persona_result(conn, doi, profile_name, persona_name)
+
+    cards = asyncio.run(
+        run_pipeline(
+            [paper], personas, persona_prompt, effective_model, api_base,
+            purpose=purpose,
+        )
+    )
+    card = cards[0]
+    upsert_results(conn, card.paper.doi, profile_name, card.results)
+    conn.close()
+    logger.info("rerun complete")

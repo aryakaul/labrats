@@ -1,7 +1,14 @@
 profiles:
   - name: CRISPR & Gene Editing
     max_papers: 5
-    purpose: ""
+    purpose: >
+      I work on therapeutic gene editing and care most about
+      delivery, off-target effects, and whether new editing
+      modalities (prime, base, epigenome editors) hold up outside
+      the original lab. Bonus points for in vivo work in non-
+      rodent models. I'm less interested in pure tool-development
+      papers without a biological payoff, or in yet-another
+      cell-line-only demonstration.
     persona_prompt: >
       You are a {role}. Read the following paper and evaluate it.
       Score each field using the full 1-10 range. Anchors:
@@ -11,22 +18,36 @@ profiles:
       6-7 = above average, worth attention;
       8-9 = excellent, top 10-15% of papers you have seen;
       10 = exceptional, field-defining work.
-      Give a short, direct take (1-2 sentences).
+      Give a short, direct take (1-2 sentences) in your own voice
+      — stay in character.
     keywords:
       - crispr
       - gene editing
       - prime editing
       - base editing
+      - epigenome editing
+      - off-target
+      - guide rna
+      - aav delivery
+      - lipid nanoparticle
     categories:
       - molecular biology
       - genetics
+      - bioengineering
     arxiv_categories:
       - q-bio.GN
       - q-bio.MN
 
   - name: Neuroscience & Cognition
     max_papers: 5
-    purpose: ""
+    purpose: >
+      I'm interested in how circuits give rise to behavior and
+      cognition, with a slight lean toward systems neuroscience
+      over pure molecular work. I want to see causal manipulations
+      (optogenetics, chemogenetics, lesions), good behavior
+      design, and analyses that respect trial-to-trial variability.
+      I'm skeptical of large-scale recordings without clear
+      hypotheses and of fMRI papers with small n.
     persona_prompt: >
       You are a {role}. Read the following paper and evaluate it.
       Score each field using the full 1-10 range. Anchors:
@@ -36,28 +57,37 @@ profiles:
       6-7 = above average, worth attention;
       8-9 = excellent, top 10-15% of papers you have seen;
       10 = exceptional, field-defining work.
-      Give a short, direct take (1-2 sentences).
+      Give a short, direct take (1-2 sentences) in your own voice
+      — stay in character.
     keywords:
       - neural circuit
       - synapse
       - cortex
       - hippocampus
       - optogenetics
+      - chemogenetics
       - connectome
       - fmri
       - cognitive
       - dopamine
       - electrophysiology
+      - behavior
     categories:
       - neuroscience
       - animal behavior and cognition
     arxiv_categories:
       - q-bio.NC
-      - q-bio.BM
 
-  - name: Structural Biology
+  - name: AI / ML Research
     max_papers: 5
-    purpose: ""
+    purpose: >
+      I follow methods-track ML, especially anything that touches
+      LLM training, post-training, evaluation, interpretability,
+      or efficiency. I care about whether claims survive proper
+      baselines and whether code/weights are released. I'm
+      uninterested in incremental benchmark-chasing papers, papers
+      that compare only against weak baselines, and papers that
+      claim emergent abilities from a single eval.
     persona_prompt: >
       You are a {role}. Read the following paper and evaluate it.
       Score each field using the full 1-10 range. Anchors:
@@ -67,22 +97,63 @@ profiles:
       6-7 = above average, worth attention;
       8-9 = excellent, top 10-15% of papers you have seen;
       10 = exceptional, field-defining work.
-      Give a short, direct take (1-2 sentences).
+      Give a short, direct take (1-2 sentences) in your own voice
+      — stay in character.
     keywords:
-      - cryo-em
-      - protein structure
-      - alphafold
-      - molecular dynamics
-      - drug design
-      - binding affinity
-      - crystallography
-      - structure prediction
-      - active site
-      - conformational
-    categories:
-      - biochemistry
-      - biophysics
-      - molecular biology
+      - language model
+      - fine-tuning
+      - rlhf
+      - reasoning
+      - interpretability
+      - mechanistic
+      - alignment
+      - benchmark
+      - in-context learning
+      - retrieval
+      - inference
+    categories: []
     arxiv_categories:
-      - q-bio.BM
+      - cs.LG
+      - cs.CL
+      - cs.AI
+      - stat.ML
+
+  - name: Computational Biology
+    max_papers: 5
+    purpose: >
+      I want the bridge between biology and ML — protein and RNA
+      structure prediction, single-cell analysis methods, sequence
+      models trained on biological data, and the tooling that
+      surrounds them. I value work where the biology actually
+      constrains the modeling choices, not papers that drop a
+      generic transformer on a biological dataset and call it a
+      day.
+    persona_prompt: >
+      You are a {role}. Read the following paper and evaluate it.
+      Score each field using the full 1-10 range. Anchors:
+      1-2 = serious flaws or fundamental problems;
+      3-4 = below average for a preprint in this field;
+      5 = average, does what it claims;
+      6-7 = above average, worth attention;
+      8-9 = excellent, top 10-15% of papers you have seen;
+      10 = exceptional, field-defining work.
+      Give a short, direct take (1-2 sentences) in your own voice
+      — stay in character.
+    keywords:
+      - single cell
+      - protein language model
+      - alphafold
+      - rna structure
+      - sequence model
+      - foundation model
+      - scrna-seq
+      - atac-seq
+      - benchmark
+    categories:
+      - bioinformatics
+      - systems biology
+    arxiv_categories:
       - q-bio.QM
+      - q-bio.BM
+      - q-bio.GN
+      - cs.LG

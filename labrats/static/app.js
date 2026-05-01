@@ -231,7 +231,7 @@ function renderDigestCards(profile, cards) {
 				date <span class="sort-arrow" hidden>▼</span>
 			</button>
 		</div>`;
-	$('digest-content').innerHTML = controls + cards.map(renderOneCard).join('');
+	$('digest-content').innerHTML = controls + cards.map(c => renderOneCard(c, profile)).join('');
 }
 
 function renderAbstractSection(card, cid) {
@@ -262,7 +262,7 @@ actions.switchAbstractTab = (btn) => {
 	btn.classList.add('active');
 };
 
-function renderOneCard(card) {
+function renderOneCard(card, profile) {
 	const cid = ++_cardId;
 	const p = card.paper;
 	const results = card.results || [];
@@ -293,7 +293,8 @@ function renderOneCard(card) {
 		};
 		return `
 			<button class="persona-btn" data-action="selectPersona"
-			        data-key="${key}" data-cid="${cid}">${esc(r.persona_name)}</button>`;
+			        data-key="${key}" data-cid="${cid}"
+			        data-persona-name="${esc(r.persona_name)}">${esc(r.persona_name)}</button>`;
 	}).join('');
 
 	const authors = (p.authors || []).join(', ');
@@ -301,7 +302,14 @@ function renderOneCard(card) {
 		<div class="card-persona-panel" id="cpp-${cid}" hidden>
 			<div class="pp-header">
 				<div id="cpt-${cid}"></div>
-				<button class="pp-close" data-action="closePersonaPanel" data-cid="${cid}">×</button>
+				<div class="pp-header-actions">
+					<button class="rerun-btn" id="rerun-${cid}"
+					        data-action="rerunPersona"
+					        data-cid="${cid}" data-doi="${esc(p.doi)}"
+					        data-profile="${esc(profile)}"
+					        title="Re-run this persona">↻</button>
+					<button class="pp-close" data-action="closePersonaPanel" data-cid="${cid}">×</button>
+				</div>
 			</div>
 			<div class="pp-body" id="cpb-${cid}"></div>
 		</div>` : '';
@@ -309,7 +317,8 @@ function renderOneCard(card) {
 	return `
 		<div class="card-wrapper"
 		     data-score="${card.avg_score.toFixed(6)}"
-		     data-date="${esc(p.date)}">
+		     data-date="${esc(p.date)}"
+		     data-doi="${esc(p.doi)}">
 			<div class="card">
 				<div class="card-header">
 					<div class="card-title">
@@ -356,8 +365,52 @@ actions.selectPersona = (btn) => {
 	$(`cpb-${cid}`).innerHTML = `
 		<div class="pp-summary">${esc(d.summary)}</div>
 		<div class="pp-scores">${scores}</div>`;
-	$(`cpp-${cid}`).hidden = false;
+	const panel = $(`cpp-${cid}`);
+	panel.dataset.activePersona = d.persona_name;
+	panel.hidden = false;
 };
+
+actions.rerunPersona = async (btn) => {
+	const { cid, doi, profile } = btn.dataset;
+	const panel = $(`cpp-${cid}`);
+	const personaName = panel?.dataset.activePersona;
+	if (!personaName) return;
+	btn.disabled = true;
+	btn.classList.add('spinning');
+	const res = await api('POST', '/api/rerun', { doi, profile, persona: personaName });
+	if (res.error) {
+		toast(res.error);
+		btn.disabled = false;
+		btn.classList.remove('spinning');
+		return;
+	}
+	pollRerunStatus(cid, doi, profile, btn);
+};
+
+async function pollRerunStatus(cid, doi, profile, btn) {
+	const s = await api('GET', '/api/rerun/status');
+	if (s.status === 'running') {
+		setTimeout(() => pollRerunStatus(cid, doi, profile, btn), 1500);
+		return;
+	}
+	if (s.status === 'error') {
+		btn.disabled = false;
+		btn.classList.remove('spinning');
+		toast(`Rerun failed: ${s.error || 'unknown'}`);
+		return;
+	}
+	// Capture which persona was open before we re-render
+	const panel = $(`cpp-${cid}`);
+	const openPersona = panel?.dataset.activePersona || null;
+	delete state.digestData[profile];
+	await loadDigestCards(profile);
+	// Reopen the same persona panel after re-render
+	if (openPersona) {
+		const wrapper = document.querySelector(`.card-wrapper[data-doi="${CSS.escape(doi)}"]`);
+		const personaBtn = wrapper?.querySelector(`.persona-btn[data-persona-name="${CSS.escape(openPersona)}"]`);
+		personaBtn?.click();
+	}
+}
 
 actions.closePersonaPanel = (btn) => closePersonaPanel(btn.dataset.cid);
 
@@ -851,6 +904,17 @@ actions.pickModel = (el) => {
 
 function renderSettings() {
 	renderDefaultModel();
+	const hoursInput = $('auto-run-hours');
+	if (hoursInput) {
+		hoursInput.value = state.settings.auto_run_hours ?? 20;
+	}
+	const lastMeta = $('last-run-at-meta');
+	if (lastMeta) {
+		const ts = state.settings.last_run_at;
+		lastMeta.textContent = ts
+			? `Last run: ${new Date(ts).toLocaleString()}`
+			: 'No runs yet.';
+	}
 	const keys = state.settings.api_keys || {};
 	const cloud = state.models.cloud || {};
 	$('settings-fields').innerHTML = PROVIDERS.map(p => {
@@ -886,6 +950,15 @@ actions.saveDefaultModel = async () => {
 	toast('Default model saved');
 	state.settings = await api('GET', '/api/settings');
 	renderDefaultModel();
+};
+
+actions.saveAutoRun = async () => {
+	const el = $('auto-run-hours');
+	const hours = parseInt(el?.value ?? '0', 10);
+	await api('PUT', '/api/settings', { auto_run_hours: isNaN(hours) ? 0 : Math.max(0, hours) });
+	toast('Auto-run saved');
+	state.settings = await api('GET', '/api/settings');
+	renderSettings();
 };
 
 actions.saveApiKeys = async () => {
@@ -955,7 +1028,20 @@ async function init() {
 		btn.disabled = true;
 		btn.textContent = 'Running...';
 		pollStatus();
+		return;
 	}
+
+	maybeAutoRun();
+}
+
+function maybeAutoRun() {
+	const hours = state.settings.auto_run_hours ?? 0;
+	if (!hours || hours <= 0) return;
+	const last = state.settings.last_run_at;
+	if (!last) return;
+	const ageHours = (Date.now() - new Date(last).getTime()) / 3_600_000;
+	if (ageHours < hours) return;
+	actions.startRun();
 }
 
 init();

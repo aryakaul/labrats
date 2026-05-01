@@ -1,38 +1,169 @@
-<h1 align="center"> labrats </h1>
+<h1 align="center">labrats</h1>
+
 <p align="center">
-    <a href="#readme">
-        <img alt="labrats" src="https://raw.githubusercontent.com/aryakaul/labrats/refs/heads/main/assets/ratteam.png">
-    </a>
+  <img alt="labrats" src="https://raw.githubusercontent.com/aryakaul/labrats/refs/heads/main/assets/ratteam.png" width="420">
 </p>
-<p align="center"> 🐀🧑🏾‍🔬 - triage preprints w/ a team of personalized, custom, and adorable labrats </p>
+
+<p align="center">
+  <em>🐀🧑🏾‍🔬 &nbsp; triage preprints with a team of personalized labrats</em>
+</p>
+
+<p align="center">
+  <a href="https://www.python.org/downloads/"><img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-blue.svg"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-see%20LICENSE-green.svg"></a>
+  <a href="https://github.com/aryakaul/labrats/issues"><img alt="Issues" src="https://img.shields.io/github/issues/aryakaul/labrats.svg"></a>
+  <img alt="Status: early" src="https://img.shields.io/badge/status-early-orange.svg">
+</p>
+
+<p align="center">
+  <a href="#what-is-labrats">About</a> •
+  <a href="#meet-the-labrats">The Labrats</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#how-it-works">How It Works</a> •
+  <a href="#configuration">Configuration</a>
+</p>
 
 ---
-## The Problem
-I recently defended my Ph.D. and one frustration I had throughout my entire time was the persistent tension between both keeping up with the firehose of new scientific advances and pursuing my own scientific research. I would constantly yo-yo between days spent primarily reading preprints and weeks where I would be solely focused on my own science. Journal club is oft suggested as a remedy for this problem, but in my experience:
-- the only person who *really* reads the paper is the one presenting it
-- there's no guarantee you will find the paper chosen to be interesting or relevant
-- maintaining and organizing it is a hassle (in my thesis lab - **impossible**)
 
-I don't think my experience is unique. The vast majority of my colleagues and friends would constantly lament that they wish they spent more time reading papers, but in the current age it is more difficult than ever. In a given month, roughly 4,000 preprints get posted to bioRxiv[citation needed]. That means that every week there are about 1,000 novel scientific preprints. I should note that these are preprints, meaning (at least theoretically), that these represent full-fledged papers describing novel scientific insights who will likely eventually get published in a scientific journal. Even if we operate under a conservative guesstimate that only 1% of these papers are relevant to your field[to say nothing of (1) papers which you might find interesting even if they are NOT in your scientific wheelhouse. I think most scientists are curious creatures otherwise why would we be in this stupid profession and (2) papers which might not be in your field but still provide relevant and meaningful insight into your field as one example, circular RNA was known and described in plants _decades_ before it was in other eukaryotes. We would have probably found it earlier if we were better at keeping up with other fields], then _every_ week there are ~10 preprints produced that warrant careful reading and thoughtful engagement. I don't want to speak for you, but personally, I know for a fact that I was not reading an average of 10 papers weekly during my doctoral work. In addition, I expect these numbers to only increase as preprinting becomes more accepted, and scientific output accelerates around the world. 
+## What is labrats?
 
-So then what are the options available to scientists? How can we reliably slake our thirst for knowledge when confronted with the firehose of scientific output? 
+> There are too many preprints. Nobody can read them all, and the ones worth reading are buried under the ones that aren't.
 
-## Some Solutions
+**labrats** is a small, local tool that helps you find the preprints actually worth your time.
 
-I first tried email digests and RSS feeds from Google Scholar and bioRxiv, but both proved unwieldy and overwhelming. Google Scholar would fire off an e-mail anytime anyone even cited an author of interest and refreshing bioRxiv's RSS feed would yield a daily deluge of new works that would be too overwhelming to sift through. The firehose was simply too powerful.
+You tell it what you care about — keywords, categories, your own research context. It pulls fresh preprints from **bioRxiv** and **arXiv**. Then a team of LLM "labrats" — each playing a distinct persona — reads every one, scores it, and writes a short summary. You see the results in a clean web UI, sorted by what your team found most interesting.
 
-You can then imagine my earnest excitement when I saw [TODO]  LLMs deployed 
+<p align="center">
+  <img alt="labrats screenshot" src="https://raw.githubusercontent.com/aryakaul/labrats/refs/heads/main/assets/screenshot.png" width="780">
+  <br>
+  <sub><em>The digest view. Each card shows the team's headline score, a disagreement flag, and one button per labrat.</em></sub>
+</p>
 
-inability to sufficiently keep up with the firehose of scientific advances constantly occurring. Every month roughly 4,000 preprints get posted to bioRxiv. That means every week there are about 1,000 novel scientific preprints. I should note that these are *preprints* meaning (at least theoretically) they represent enough novel scientific work to justify a soon-to-be-published result. These aren't half-baked 20 minute WIP lunch seminars. Even if we operate under a conservative estimate that only 1% of those papers are relevant to your topic of interest (I find this quite silly as all scientists are seeking to better understand the Universe and there is only ONE Universe. Even if it doesn't seem like melanoma has no immediate connection to plant physiology, I reject the notion that there is absolutely *nothing* to be gained by at least superficially engaging with the plant field) then that means that there are 10 relevant papers being produced every week that demand careful, precise, and complete reading. Speaking for myself, I know that it was actively impossible to simultaneously juggle my own research and keeping abreast of the latest science. I first tried email digests, then RSS feeds, but both proved unwieldy. In the end, I settled for reading papers with interesting  twitter threads, those recommended by my friends and collaborators, and those that I stumbled upon while studying the background for my own research projects.
+It's open-source, runs on your machine, and works with whatever LLM you want — OpenAI, Anthropic, Gemini, Groq, or a local Ollama model.
 
-None of these approaches felt particularly satisfying, and I resigned myself to only getting the freedom to engage with the scientific literature when I finished my Ph.D. You can imagine my PLEASANT surprise to then see the rise of multiple, capable language models able to respond intelligently and ingest scientific material. I then saw numerous companies and public benefit corporations make a big hullaballoo around AI scientists and co-scientists. Setting aside how much of those claims are overblown versus real, it was frustrating to not find anybody doing what I thought would be one of the simplest and most useful applications of this technology in science -- triaging and streamlining the firehose of scientific research.
+> 📝 Want the longer story? Read the [Substack post](TODO: link) for the why.
 
-I then finished my Ph.D. and I now stand before you, wholly **_unshackled_** from the horrors of thesis writing. With this newfound freetime and freedom, I can now quixotically pursue each of my insane side projects. Thus, `labrats` was born.
+---
 
-Simply put, `labrats` is designed to simulate a Journal Club you might have with your labmates around a preprint. You provide a topic or keywords of interest, we pull all new preprints matching those preprints, and then a collection of LLMs (your team of labrats) ingest the abstracts and evaluate them. Each of these labrats inhabits a distinct persona meant to focus on distinct aspects of the work. I've coded some, but you can easily modify them however you want. 
+## Meet the labrats
 
-After each labrat has had the chance to read all matching preprints, they each independently judge each preprint on a variety of metrics. These metrics, and the paper analysis, are then made accessible to the user. The goal is to build a team of labrats that can bubble up interesting papers you might have missed and ensure you are getting access to the papers most interesting to you. Everything is open-sourced and designed to be as extensible and modular as possible.
+Each labrat reads the same paper but cares about different things. **Disagreement is itself a signal** — the UI flags papers where the team didn't see eye to eye.
 
-## Quick Start
+| | Labrat | What they care about |
+|---|---|---|
+| 🎓 | **Excited Grad Student** | Novelty, curiosity, cross-field connections |
+| 💼 | **Hype-Chasing PI** | Fundability, citations, who's behind it |
+| 🔬 | **Postdoc Savant** | Technical depth, methodological elegance |
+| 🦅 | **Reviewer 2** | Missing controls, alternative explanations, every flaw |
+| 🪶 | **Reproducibility Hawk** | Released code, data, weights, statistical rigor |
 
+You can edit any of these, disable them, or write your own — labrats are just YAML files.
 
+---
+
+## Quick start
+
+```bash
+# install
+pipx install labrats           # or: uv tool install labrats
+
+# first-time setup (creates ~/.config/labrats with sensible defaults)
+labrats init
+
+# add an API key in ~/.config/labrats/settings.yaml
+# (or set OPENAI_API_KEY / ANTHROPIC_API_KEY / etc. in your shell)
+
+# launch the web UI
+labrats serve
+```
+
+The UI opens in your browser. Set up a profile (your topic of interest), click **Run**, and your labrats will get to work.
+
+> Prefer the command line? `labrats run` does the same thing headless — handy for cron, systemd, or launchd.
+
+---
+
+## How it works
+
+```
+   ┌────────┐     ┌─────────┐     ┌──────────┐     ┌────────┐
+   │ scrape │ ──▶ │  read   │ ──▶ │synthesize│ ──▶ │ triage │
+   └────────┘     └─────────┘     └──────────┘     └────────┘
+   bioRxiv +      each labrat     average scores,   you skim a
+   arXiv          scores +         flag disputes    sorted feed
+                  summarizes
+```
+
+1. **Scrape** — fetches new preprints from bioRxiv and arXiv matching your profile.
+2. **Read** — each labrat scores each abstract on rigor, novelty, and relevance, plus a short written take.
+3. **Synthesize** — scores average into a headline number; disagreements get flagged.
+4. **Triage** — you skim cards, drill into a paper, see each labrat's perspective, and re-run any of them on demand.
+
+Nothing leaves your machine except the API calls to whichever LLM provider you've configured.
+
+---
+
+## Configuration
+
+Everything lives in `~/.config/labrats/`:
+
+| File | What's in it |
+|---|---|
+| `settings.yaml` | API keys, default model, auto-run interval |
+| `profiles.yaml` | Your topics: keywords, categories, which labrats to use |
+| `personas/*.yaml` | One file per labrat — edit freely |
+
+The web UI has a Settings tab that edits all of this for you, but the files are plain YAML if you'd rather hand-edit.
+
+<details>
+<summary><strong>API keys & security</strong></summary>
+
+API keys are stored in `~/.config/labrats/settings.yaml`, which is automatically chmod'd to `0600` (readable only by your user). This matches what tools like `aws`, `gh`, and `kubectl` do.
+
+If you'd rather not store keys on disk at all, set them as environment variables instead — labrats falls back to `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, etc.
+
+**Don't commit `settings.yaml` to a repo.**
+</details>
+
+<details>
+<summary><strong>Adding your own labrat</strong></summary>
+
+Drop a YAML file into `~/.config/labrats/personas/`:
+
+```yaml
+name: The Translator
+role: >
+  A working clinician who reads every paper asking
+  "could this change practice in the next five years?"
+  You are unimpressed by elegant methods that don't
+  connect to a real patient or decision.
+scored_fields:
+  - methodological_rigor
+  - novelty
+  - relevance
+```
+
+That's it. Restart the UI and your new labrat joins the team.
+</details>
+
+<details>
+<summary><strong>Auto-run on open</strong></summary>
+
+In the **Models** tab, set "Auto-run after N hours." When you open labrats, if the last run finished longer ago than that threshold, a fresh run kicks off automatically. Set to `0` to disable.
+
+For true background runs while your machine is closed, schedule `labrats run` via cron / launchd / Task Scheduler.
+</details>
+
+---
+
+## Status
+
+Early days. Bugs exist. Feedback and PRs welcome — open an [issue](https://github.com/aryakaul/labrats/issues) or hop in to chat.
+
+## License
+
+See [LICENSE](LICENSE).
+
+<p align="center">
+  <sub>made by <a href="https://arya.casa">Arya Kaul</a> · 🐀</sub>
+</p>

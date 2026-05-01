@@ -171,6 +171,17 @@ def papers_needing_eval(
     return [p for p in papers if p.doi not in done]
 
 
+def delete_persona_result(
+    conn: sqlite3.Connection, doi: str, profile: str, persona_name: str
+) -> None:
+    """Delete one persona's result for a paper so it can be re-evaluated."""
+    conn.execute(
+        "DELETE FROM results WHERE doi = ? AND profile = ? AND persona_name = ?",
+        (doi, profile, persona_name),
+    )
+    conn.commit()
+
+
 def upsert_results(
     conn: sqlite3.Connection,
     doi: str,

@@ -4,6 +4,7 @@ import json
 import logging
 import threading
 import webbrowser
+from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote
@@ -34,7 +35,7 @@ from labrats.personas import (
     save_profiles,
     save_settings,
 )
-from labrats.runner import run_all_profiles
+from labrats.runner import run_all_profiles, rerun_paper
 from labrats.synthesis import parse_llm_summary, score_cards
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -63,6 +64,17 @@ _run_state = {
     "progress": {"completed": 0, "total": 0},
     "error": None,
 }
+
+_rerun_state = {"status": "idle", "error": None}  # idle | running | done | error
+
+
+def _do_rerun_background(config_dir, db_path, model, api_base, doi, profile_name, persona_name):
+    try:
+        rerun_paper(config_dir, db_path, model, api_base, doi, profile_name, persona_name)
+        _rerun_state.update({"status": "done", "error": None})
+    except Exception as e:
+        logger.exception(f"rerun failed: {e}")
+        _rerun_state.update({"status": "error", "error": str(e)})
 
 
 def _reset_run_state():
@@ -148,6 +160,12 @@ def _background_run(config_dir, db_path, model, api_base, source):
             ),
         )
         _run_state["status"] = "done"
+        try:
+            current = load_settings(config_dir)
+            current["last_run_at"] = datetime.now(timezone.utc).isoformat()
+            save_settings(config_dir, current)
+        except Exception:
+            logger.exception("failed to record last_run_at")
     except Exception as e:
         logger.exception(f"run failed: {e}")
         _run_state["status"] = "error"
@@ -232,6 +250,8 @@ class ServeHandler(BaseHTTPRequestHandler):
             self._send_json({
                 "default_model": data.get("default_model", ""),
                 "api_keys": _mask_api_keys(data.get("api_keys", {})),
+                "auto_run_hours": data.get("auto_run_hours", 20),
+                "last_run_at": data.get("last_run_at", ""),
             })
 
         elif path == "/api/models":
@@ -259,6 +279,9 @@ class ServeHandler(BaseHTTPRequestHandler):
 
         elif path == "/api/run/status":
             self._send_json(dict(_run_state))
+
+        elif path == "/api/rerun/status":
+            self._send_json(dict(_rerun_state))
 
         elif path.startswith("/static/"):
             self._send_static(path[len("/static/"):])
@@ -343,6 +366,9 @@ class ServeHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/run":
             self._start_run()
 
+        elif self.path == "/api/rerun":
+            self._start_rerun()
+
         else:
             self.send_error(404)
 
@@ -356,6 +382,29 @@ class ServeHandler(BaseHTTPRequestHandler):
         t = threading.Thread(
             target=_background_run,
             args=(self.config_dir, self.db_path, model, self.api_base, self.source),
+            daemon=True,
+        )
+        t.start()
+        self._send_json({"ok": True})
+
+    def _start_rerun(self):
+        """Kick off a single-persona rerun in the background."""
+        if _rerun_state["status"] == "running":
+            self._send_json({"error": "already running"}, 409)
+            return
+        data = self._read_body()
+        doi = data.get("doi", "")
+        profile_name = data.get("profile", "")
+        persona_name = data.get("persona", "")
+        if not doi or not profile_name or not persona_name:
+            self._send_json({"error": "missing doi, profile, or persona"}, 400)
+            return
+        _rerun_state.update({"status": "running", "error": None})
+        model = resolve_model(self.model, self.config_dir)
+        t = threading.Thread(
+            target=_do_rerun_background,
+            args=(self.config_dir, self.db_path, model, self.api_base,
+                  doi, profile_name, persona_name),
             daemon=True,
         )
         t.start()
@@ -378,6 +427,11 @@ class ServeHandler(BaseHTTPRequestHandler):
             current["api_keys"] = cur_keys
             if "default_model" in data:
                 current["default_model"] = data["default_model"]
+            if "auto_run_hours" in data:
+                try:
+                    current["auto_run_hours"] = max(0, int(data["auto_run_hours"]))
+                except (TypeError, ValueError):
+                    current["auto_run_hours"] = 0
             save_settings(self.config_dir, current)
             self._send_json({"ok": True})
             return
