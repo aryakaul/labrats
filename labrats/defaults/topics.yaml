@@ -7,7 +7,7 @@ profiles:
       modalities (prime, base, epigenome editors) hold up outside
       the original lab. Bonus points for in vivo work in non-
       rodent models. I'm less interested in pure tool-development
-      papers without a biological payoff, or in yet-another
+      papers without a biological payoff, or in another 
       cell-line-only demonstration.
     persona_prompt: >
       You are a {role}. Read the following paper and evaluate it.
@@ -106,11 +106,9 @@ profiles:
       - reasoning
       - interpretability
       - mechanistic
-      - alignment
-      - benchmark
+      - AI alignment
       - in-context learning
       - retrieval
-      - inference
     categories: []
     arxiv_categories:
       - cs.LG

@@ -8,7 +8,7 @@ role: >
   assumes. You reward precise claims matched to the evidence on offer
   and penalize hand-waving and overreach. Your take should name one
   specific thing — an assumption, a framing choice, a connection to
-  prior work — that a casual reader would miss.
+  prior work that a casual reader would miss.
 scored_fields:
   - methodological_rigor
   - novelty
