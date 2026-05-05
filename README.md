@@ -39,7 +39,7 @@ You provide a list of filtering criteria - keywords, categories, your own resear
 
 The code is open-source, it runs on your machine, and works with whatever LLM you want — OpenAI, Anthropic, Gemini, or locally installed models.
 
-> 📝 My [substack post](TODO: link) has more details if you're interested.
+> 📝 My [substack post](https://open.substack.com/pub/aryakaul/p/labrats?r=hiz29&utm_campaign=post&utm_medium=web&showWelcomeOnShare=true) has more details if you're interested.
 
 ---
 
