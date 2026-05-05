@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://www.python.org/downloads/"><img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-blue.svg"></a>
+  
   ![](./.github/vibecode.svg)
 </p>
 
