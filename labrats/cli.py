@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 from datetime import date, timedelta
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
 import requests
@@ -52,11 +53,23 @@ def _configure_logging(verbose: bool) -> None:
     )
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(_pkg_version("labrats"))
+        raise typer.Exit()
+
+
 @app.callback()
 def _root(
     verbose: bool = typer.Option(
         False, "--verbose", "-v",
         help="Show DEBUG logs (default shows INFO and above).",
+    ),
+    version: bool = typer.Option(
+        False, "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit.",
     ),
 ):
     """labrats — personalized preprint triage."""
