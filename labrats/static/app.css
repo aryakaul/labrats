@@ -144,6 +144,17 @@ header {
 	border-bottom: 1px solid #eee;
 	gap: 0.5rem;
 }
+.pp-title {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+}
+.pp-img {
+	width: 44px;
+	height: 44px;
+	object-fit: contain;
+	flex: 0 0 auto;
+}
 .pp-name {
 	font-size: 0.85rem;
 	font-weight: 600;

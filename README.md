@@ -1,7 +1,7 @@
 <h1 align="center">labrats</h1>
 
 <p align="center">
-  <img alt="labrats" src="https://raw.githubusercontent.com/aryakaul/labrats/refs/heads/main/assets/ratteam.png" width="420">
+  <img alt="labrats" src="https://raw.githubusercontent.com/aryakaul/labrats/refs/heads/main/assets/labrats.png" width="640">
 </p>
 
 <p align="center">
@@ -21,6 +21,10 @@
   <a href="#quick-start">Quick Start</a> •
   <a href="#how-it-works">How It Works</a> •
   <a href="#configuration">Configuration</a>
+</p>
+
+<p align="center">
+  <em>👋 New to the command line? Start with the <a href="https://github.com/aryakaul/labrats/wiki/Getting-Started">step-by-step Getting Started guide</a> — it walks you through everything, no prior experience required.</em>
 </p>
 
 ---
@@ -55,13 +59,19 @@ Each labrat reads the same paper but cares about different things. **Disagreemen
 | 💼 | **Hype-Chasing PI** | Fundability, citations, who's behind it |
 | 🔬 | **Postdoc Savant** | Technical depth, methodological elegance |
 | 🦅 | **Reviewer 2** | Missing controls, alternative explanations, every flaw |
-| 🪶 | **Reproducibility Hawk** | Released code, data, weights, statistical rigor |
+| 🧐 | **Skeptical Senior Scientist** | Released code, data, weights, statistical rigor |
 
 You can edit any of these, disable them, or write your own — labrats are just YAML files.
 
 ---
 
 ## Quick start
+
+### 👋 New to this?
+
+The [**Getting Started guide**](https://github.com/aryakaul/labrats/wiki/Getting-Started) on the wiki walks you through everything — installing Python, installing labrats, and setting up a **free local LLM** so you don't need an API key or a credit card. Step-by-step, with screenshots, on macOS, Windows, or Linux.
+
+### Already comfortable with the command line?
 
 ```bash
 # install
@@ -72,6 +82,7 @@ labrats init
 
 # add an API key in ~/.config/labrats/settings.yaml
 # (or set OPENAI_API_KEY / ANTHROPIC_API_KEY / etc. in your shell)
+# — or skip API keys entirely with a local model: see the wiki
 
 # launch the web UI
 labrats serve
@@ -80,6 +91,8 @@ labrats serve
 The UI opens in your browser. Set up a profile (your topic of interest), click **Run**, and your labrats will get to work.
 
 > Prefer the command line? `labrats run` does the same thing headless — handy for cron, systemd, or launchd.
+
+> 🆓 Want to run labrats **without paying for an API**? See [Set up a free local LLM](https://github.com/aryakaul/labrats/wiki/Local-LLM-Setup) on the wiki.
 
 ---
 

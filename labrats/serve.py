@@ -26,6 +26,7 @@ from labrats.models_registry import (
     list_cloud_models,
 )
 from labrats.personas import (
+    _slugify,
     delete_persona,
     load_personas,
     load_profiles,
@@ -102,6 +103,14 @@ def _list_personas_raw(config_dir):
     ]
 
 
+def _persona_image_url(persona_name: str) -> str:
+    """Return the URL of a bundled persona image, or '' if none exists."""
+    slug = _slugify(persona_name)
+    if (STATIC_DIR / "personas" / f"{slug}.png").is_file():
+        return f"/static/personas/{slug}.png"
+    return ""
+
+
 def _card_to_dict(card):
     """Serialize a PaperCard to a JSON-safe dict for the digest API."""
     p = card.paper
@@ -121,6 +130,7 @@ def _card_to_dict(card):
                 "scores": r.scores,
                 "summary": r.summary,
                 "model": r.model,
+                "image_url": _persona_image_url(r.persona_name),
             }
             for r in card.results
         ],

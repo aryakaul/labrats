@@ -290,6 +290,7 @@ function renderOneCard(card, profile) {
 			model: r.model || '',
 			summary: r.summary,
 			scores: r.scores,
+			image_url: r.image_url || '',
 		};
 		return `
 			<button class="persona-btn" data-action="selectPersona"
@@ -357,8 +358,13 @@ actions.selectPersona = (btn) => {
 	const d = state.personaData[key];
 	if (!d) return;
 	$(`cpt-${cid}`).innerHTML = `
-		<div class="pp-name">${esc(d.persona_name)}</div>
-		${d.model ? `<span class="pp-model">${esc(d.model)}</span>` : ''}`;
+		<div class="pp-title">
+			${d.image_url ? `<img class="pp-img" src="${esc(d.image_url)}" alt="">` : ''}
+			<div class="pp-name-wrap">
+				<div class="pp-name">${esc(d.persona_name)}</div>
+				${d.model ? `<span class="pp-model">${esc(d.model)}</span>` : ''}
+			</div>
+		</div>`;
 	const scores = Object.keys(d.scores)
 		.map(k => `${esc(k.replace(/_/g, ' '))}: ${d.scores[k].toFixed(0)}`)
 		.join(' · ');
