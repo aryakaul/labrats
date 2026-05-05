@@ -17,7 +17,7 @@ def get_color(pct):
 
 def main():
 	try:
-		with open(".vibecode") as f:
+		with open(".github/.vibecode") as f:
 			pct = int(f.read().strip())
 	except FileNotFoundError:
 		print("Error: .vibecode not found")
