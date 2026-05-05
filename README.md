@@ -88,7 +88,7 @@ labrats serve
 
 The UI opens in your browser. You can go to the Settings tab to set up a personal profiles (on your topics of interest), click **Run**, and your labrats will get to work. 
 
-> If you prefer the command line: `labrats run` does the same thing headless. I use this for automated runs via CRON jobs.
+> If you prefer the command line: `labrats run` does the same thing headless. I use this for automated runs via cron jobs.
 
 > See [Set up a free local LLM](https://github.com/aryakaul/labrats/wiki/Local-LLM-Setup) on the wiki.
 
@@ -163,14 +163,11 @@ For true background runs while your machine is closed, schedule `labrats run` vi
 
 ---
 
-## Status
-
-Early days. Bugs exist. Feedback and PRs welcome — open an [issue](https://github.com/aryakaul/labrats/issues) or hop in to chat.
 
 ## License
 
 See [LICENSE](LICENSE).
 
 <p align="center">
-  <sub>made by <a href="https://arya.casa">Arya Kaul</a> · 🐀</sub>
+  <sub>made by <a href="https://arya.casa">Arya</a> w/ ❤️ · 🐀</sub>
 </p>

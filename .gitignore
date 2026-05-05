@@ -37,3 +37,6 @@ output/*
 .claude/
 AGENT*.md
 braindump.md
+
+# Assets
+assets/labrats.ai
