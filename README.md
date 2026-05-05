@@ -5,14 +5,12 @@
 </p>
 
 <p align="center">
-  <em>🐀🧑🏾‍🔬 &nbsp; triage preprints with a team of personalized labrats</em>
+  🐀🧑🏾‍🔬 &nbsp; triage preprints with a team of personalized labrats
 </p>
 
 <p align="center">
   <a href="https://www.python.org/downloads/"><img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-blue.svg"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-see%20LICENSE-green.svg"></a>
-  <a href="https://github.com/aryakaul/labrats/issues"><img alt="Issues" src="https://img.shields.io/github/issues/aryakaul/labrats.svg"></a>
-  <img alt="Status: early" src="https://img.shields.io/badge/status-early-orange.svg">
+  ![](./.github/vibecode.svg)
 </p>
 
 <p align="center">
@@ -31,11 +29,11 @@
 
 ## What is labrats?
 
-> There are too many preprints. Nobody can read them all, and the ones worth reading are buried under the ones that aren't.
+> The number of new preprints is overwhelming. Managing which works to dive into is exceedingly difficult. 
 
-**labrats** is a small, local tool that helps you find the preprints actually worth your time.
+`labrats` is a small, local tool that helps you triage preprints that might be worth diving into.
 
-You tell it what you care about — keywords, categories, your own research context. It pulls fresh preprints from **bioRxiv** and **arXiv**. Then a team of LLM "labrats" — each playing a distinct persona — reads every one, scores it, and writes a short summary. You see the results in a clean web UI, sorted by what your team found most interesting.
+You provide a list of filtering criteria - keywords, categories, your own research context. `labrats` then pulls all the new preprints and a team of LLM-powered "labrats" (each playing a distinct persona) reads each abstract, scores it, and writes their thoughts. You can peruse the results in a clean webpage, and then pick those papers that you want to spend time reading in-depth. 
 
 <p align="center">
   <img alt="labrats screenshot" src="https://raw.githubusercontent.com/aryakaul/labrats/refs/heads/main/assets/screenshot.png" width="780">
@@ -43,15 +41,15 @@ You tell it what you care about — keywords, categories, your own research cont
   <sub><em>The digest view. Each card shows the team's headline score, a disagreement flag, and one button per labrat.</em></sub>
 </p>
 
-It's open-source, runs on your machine, and works with whatever LLM you want — OpenAI, Anthropic, Gemini, Groq, or a local Ollama model.
+The code is open-source, it runs on your machine, and works with whatever LLM you want — OpenAI, Anthropic, Gemini, or locally installed models.
 
-> 📝 Want the longer story? Read the [Substack post](TODO: link) for the why.
+> 📝 My [substack post](TODO: link) has more details if you're interested.
 
 ---
 
-## Meet the labrats
+## Meet your labrats
 
-Each labrat reads the same paper but cares about different things. **Disagreement is itself a signal** — the UI flags papers where the team didn't see eye to eye.
+Each labrat reads the same abstract but cares about and prioritizes different things. Here are the defaults bundled with `labrats`:
 
 | | Labrat | What they care about |
 |---|---|---|
@@ -61,23 +59,23 @@ Each labrat reads the same paper but cares about different things. **Disagreemen
 | 🦅 | **Reviewer 2** | Missing controls, alternative explanations, every flaw |
 | 🧐 | **Skeptical Senior Scientist** | Released code, data, weights, statistical rigor |
 
-You can edit any of these, disable them, or write your own — labrats are just YAML files.
+You can edit any of these, disable them, or write your own — each labrat is just a YAML file. These are just the defaults I've encoded after spending time in the sciences.
 
 ---
 
 ## Quick start
 
-### 👋 New to this?
+### 👋 If you don't know what the command line is
 
-The [**Getting Started guide**](https://github.com/aryakaul/labrats/wiki/Getting-Started) on the wiki walks you through everything — installing Python, installing labrats, and setting up a **free local LLM** so you don't need an API key or a credit card. Step-by-step, with screenshots, on macOS, Windows, or Linux.
+The [**Getting Started guide**](https://github.com/aryakaul/labrats/wiki/Getting-Started) on the wiki walks you through everything — installing Python, installing `labrats`, and setting up a free local LLM so you don't have to worry about API keys. 
 
-### Already comfortable with the command line?
+### If you're comfortable with the command line
 
 ```bash
 # install
 pipx install labrats           # or: uv tool install labrats
 
-# first-time setup (creates ~/.config/labrats with sensible defaults)
+# first-time setup (creates ~/.config/labrats with example defaults)
 labrats init
 
 # add an API key in ~/.config/labrats/settings.yaml
@@ -88,29 +86,20 @@ labrats init
 labrats serve
 ```
 
-The UI opens in your browser. Set up a profile (your topic of interest), click **Run**, and your labrats will get to work.
+The UI opens in your browser. You can go to the Settings tab to set up a personal profiles (on your topics of interest), click **Run**, and your labrats will get to work. 
 
-> Prefer the command line? `labrats run` does the same thing headless — handy for cron, systemd, or launchd.
+> If you prefer the command line: `labrats run` does the same thing headless. I use this for automated runs via CRON jobs.
 
-> 🆓 Want to run labrats **without paying for an API**? See [Set up a free local LLM](https://github.com/aryakaul/labrats/wiki/Local-LLM-Setup) on the wiki.
+> See [Set up a free local LLM](https://github.com/aryakaul/labrats/wiki/Local-LLM-Setup) on the wiki.
 
 ---
 
 ## How it works
 
-```
-   ┌────────┐     ┌─────────┐     ┌──────────┐     ┌────────┐
-   │ scrape │ ──▶ │  read   │ ──▶ │synthesize│ ──▶ │ triage │
-   └────────┘     └─────────┘     └──────────┘     └────────┘
-   bioRxiv +      each labrat     average scores,   you skim a
-   arXiv          scores +         flag disputes    sorted feed
-                  summarizes
-```
-
-1. **Scrape** — fetches new preprints from bioRxiv and arXiv matching your profile.
-2. **Read** — each labrat scores each abstract on rigor, novelty, and relevance, plus a short written take.
-3. **Synthesize** — scores average into a headline number; disagreements get flagged.
-4. **Triage** — you skim cards, drill into a paper, see each labrat's perspective, and re-run any of them on demand.
+1. **Scrape** — fetch all new preprints from bioRxiv and arXiv matching the filters specified in your profile.
+2. **Read** — each labrat then scores each abstract on rigor, novelty, and relevance. They then give a short written take.
+3. **Synthesize** — averages scores into a headline number; categories with significant disagreements get flagged.
+4. **Triage** — you can then skim the abstracts, see each labrat's perspective, and flag those papers that you find most interesting. 
 
 Nothing leaves your machine except the API calls to whichever LLM provider you've configured.
 
@@ -133,7 +122,7 @@ The web UI has a Settings tab that edits all of this for you, but the files are 
 
 API keys are stored in `~/.config/labrats/settings.yaml`, which is automatically chmod'd to `0600` (readable only by your user). This matches what tools like `aws`, `gh`, and `kubectl` do.
 
-If you'd rather not store keys on disk at all, set them as environment variables instead — labrats falls back to `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, etc.
+If you'd rather not store keys on disk at all, set them as environment variables instead — `labrats` falls back to `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, etc.
 
 **Don't commit `settings.yaml` to a repo.**
 </details>
@@ -147,7 +136,7 @@ Drop a YAML file into `~/.config/labrats/personas/`:
 name: The Translator
 role: >
   A working clinician who reads every paper asking
-  "could this change practice in the next five years?"
+  "could this change medical practice in the next five years?"
   You are unimpressed by elegant methods that don't
   connect to a real patient or decision.
 scored_fields:
@@ -156,7 +145,12 @@ scored_fields:
   - relevance
 ```
 
-That's it. Restart the UI and your new labrat joins the team.
+Restart the UI by quitting and rerunning `labrats serve` and your new labrat joins the team.
+
+**Optional — give your labrat a face.** Drop a PNG next to the YAML
+named after the file, e.g. `~/.config/labrats/personas/the_translator.png`.
+It'll show up in the persona panel automatically. (You can also
+override the bundled images this way.)
 </details>
 
 <details>
