@@ -166,7 +166,7 @@ For true background runs while your machine is closed, schedule `labrats run` vi
 
 ## License
 
-See [LICENSE](LICENSE).
+Released under version 5 of the [ETHICAL LICENSE](https://github.com/aryakaul/ethical-license).
 
 <p align="center">
   <sub>made by <a href="https://arya.casa">Arya</a> w/ ❤️ · 🐀</sub>
