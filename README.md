@@ -65,7 +65,7 @@ You can edit any of these, disable them, or write your own — each labrat is ju
 
 The [**Getting Started guide**](https://github.com/aryakaul/labrats/wiki/Getting-Started) on the wiki walks you through everything — installing Python, installing `labrats`, and setting up a free local LLM so you don't have to worry about API keys. 
 
-### If you're comfortable with the command line
+### 👋 If you're comfortable with the command line
 
 ```bash
 # install
