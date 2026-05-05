@@ -93,6 +93,10 @@ document.addEventListener('change', (ev) => {
 	if (t && actions[t.dataset.change]) actions[t.dataset.change](t, ev);
 });
 
+document.addEventListener('blur', (ev) => {
+	if (ev.target.id === 'auto-run-hours') actions.saveAutoRun();
+}, true);
+
 /* ── model datalist + checkbox helpers ── */
 
 function activeModelOptions() {
@@ -232,6 +236,20 @@ function renderDigestCards(profile, cards) {
 			</button>
 		</div>`;
 	$('digest-content').innerHTML = controls + cards.map(c => renderOneCard(c, profile)).join('');
+	renderMath($('digest-content'));
+}
+
+function renderMath(el) {
+	if (typeof renderMathInElement === 'undefined') return;
+	renderMathInElement(el, {
+		delimiters: [
+			{ left: '$$', right: '$$', display: true },
+			{ left: '$', right: '$', display: false },
+			{ left: '\\(', right: '\\)', display: false },
+			{ left: '\\[', right: '\\]', display: true },
+		],
+		throwOnError: false,
+	});
 }
 
 function renderAbstractSection(card, cid) {
@@ -913,11 +931,8 @@ function renderSettings() {
 	const hoursInput = $('auto-run-hours');
 	if (hoursInput) {
 		hoursInput.value = state.settings.auto_run_hours ?? 20;
-	}
-	const lastMeta = $('last-run-at-meta');
-	if (lastMeta) {
 		const ts = state.settings.last_run_at;
-		lastMeta.textContent = ts
+		hoursInput.title = ts
 			? `Last run: ${new Date(ts).toLocaleString()}`
 			: 'No runs yet.';
 	}
@@ -962,7 +977,6 @@ actions.saveAutoRun = async () => {
 	const el = $('auto-run-hours');
 	const hours = parseInt(el?.value ?? '0', 10);
 	await api('PUT', '/api/settings', { auto_run_hours: isNaN(hours) ? 0 : Math.max(0, hours) });
-	toast('Auto-run saved');
 	state.settings = await api('GET', '/api/settings');
 	renderSettings();
 };

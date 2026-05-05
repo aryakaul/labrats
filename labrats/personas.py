@@ -231,7 +231,10 @@ async def summarize_abstract(
         {"role": "system", "content": _SUMMARY_SYSTEM},
         {"role": "user", "content": user_msg},
     ]
-    kwargs = _completion_kwargs(model, messages, api_base, temperature=0.2)
+    kwargs = _completion_kwargs(
+        model, messages, api_base,
+        temperature=0.2, max_tokens=1024,
+    )
     response = await acompletion(**kwargs)
     return (response.choices[0].message.content or "").strip()
 
@@ -251,6 +254,7 @@ async def run_persona(
         effective_model, messages, api_base,
         response_format={"type": "json_object"},
         temperature=0.3,
+        max_tokens=1024,
     )
     response = await acompletion(**kwargs)
     content = (response.choices[0].message.content or "").strip()
@@ -259,7 +263,7 @@ async def run_persona(
     if content.startswith("```"):
         content = "\n".join(content.splitlines()[1:-1]).strip()
 
-    raw = json.loads(content)
+    raw = json.loads(content, strict=False)
     return PersonaResult(
         persona_name=persona.name,
         scores={k: float(raw["scores"][k]) for k in persona.scored_fields},

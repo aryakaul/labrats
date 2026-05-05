@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import threading
 import webbrowser
 from datetime import datetime, timezone
@@ -103,15 +104,31 @@ def _list_personas_raw(config_dir):
     ]
 
 
-def _persona_image_url(persona_name: str) -> str:
-    """Return the URL of a bundled persona image, or '' if none exists."""
+def _resolve_persona_image(slug: str, config_dir: Path) -> Path | None:
+    """Find a persona image file, preferring the user's config dir.
+
+    Looks for ``<config_dir>/personas/<slug>.png`` first (so users can
+    drop in art for custom personas — or override bundled images),
+    then falls back to the bundled ``labrats/static/personas/<slug>.png``.
+    """
+    user = config_dir / "personas" / f"{slug}.png"
+    if user.is_file():
+        return user
+    bundled = STATIC_DIR / "personas" / f"{slug}.png"
+    if bundled.is_file():
+        return bundled
+    return None
+
+
+def _persona_image_url(persona_name: str, config_dir: Path) -> str:
+    """Return the URL for a persona image, or '' if none exists."""
     slug = _slugify(persona_name)
-    if (STATIC_DIR / "personas" / f"{slug}.png").is_file():
-        return f"/static/personas/{slug}.png"
+    if _resolve_persona_image(slug, config_dir):
+        return f"/persona-image/{slug}.png"
     return ""
 
 
-def _card_to_dict(card):
+def _card_to_dict(card, config_dir: Path):
     """Serialize a PaperCard to a JSON-safe dict for the digest API."""
     p = card.paper
     return {
@@ -130,7 +147,9 @@ def _card_to_dict(card):
                 "scores": r.scores,
                 "summary": r.summary,
                 "model": r.model,
-                "image_url": _persona_image_url(r.persona_name),
+                "image_url": _persona_image_url(
+                    r.persona_name, config_dir,
+                ),
             }
             for r in card.results
         ],
@@ -220,6 +239,28 @@ class ServeHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_persona_image(self, filename: str):
+        """Serve a persona image — user config wins over bundled."""
+        name = filename.split("?", 1)[0].split("#", 1)[0]
+        if not name.endswith(".png") or "/" in name or "\\" in name:
+            self.send_error(404)
+            return
+        slug = name[:-len(".png")]
+        if not re.fullmatch(r"[a-z0-9_]+", slug):
+            self.send_error(404)
+            return
+        fpath = _resolve_persona_image(slug, self.config_dir)
+        if not fpath:
+            self.send_error(404)
+            return
+        body = fpath.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
     def _send_static(self, rel_path: str):
         """Serve a file from labrats/static/ with no-cache headers."""
         # strip query string, then resolve and confine to STATIC_DIR
@@ -296,6 +337,9 @@ class ServeHandler(BaseHTTPRequestHandler):
         elif path.startswith("/static/"):
             self._send_static(path[len("/static/"):])
 
+        elif path.startswith("/persona-image/"):
+            self._send_persona_image(path[len("/persona-image/"):])
+
         elif path in ("/", ""):
             self._send_html(INDEX_HTML.read_bytes())
 
@@ -356,7 +400,7 @@ class ServeHandler(BaseHTTPRequestHandler):
 
         cards = score_cards(cards)
         conn.close()
-        self._send_json([_card_to_dict(c) for c in cards])
+        self._send_json([_card_to_dict(c, self.config_dir) for c in cards])
 
     # ── POST ──
 

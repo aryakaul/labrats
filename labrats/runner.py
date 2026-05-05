@@ -178,17 +178,19 @@ def run_all_profiles(
                     on_progress(done, total)
             return cb
 
-        new_cards = asyncio.run(
+        def _persist(card, _pname=pname):
+            upsert_results(conn, card.paper.doi, _pname, card.results)
+            if card.llm_summary:
+                upsert_llm_summary(conn, card.paper.doi, card.llm_summary)
+
+        asyncio.run(
             run_pipeline(
                 to_eval, personas, persona_prompt,
                 effective_model, api_base, _make_progress_cb(to_eval),
                 purpose=purpose,
+                on_card=_persist,
             )
         )
-        for card in new_cards:
-            upsert_results(conn, card.paper.doi, pname, card.results)
-            if card.llm_summary:
-                upsert_llm_summary(conn, card.paper.doi, card.llm_summary)
 
         logger.info(f"  {pname}: done")
 

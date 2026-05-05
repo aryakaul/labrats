@@ -5,7 +5,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>labrats</title>
+<link rel="icon" type="image/png" href="/static/personas/excited_grad_student.png">
 <link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 </head>
 <body>
 <header>
@@ -13,6 +15,7 @@
   <span class="header-title">labrats</span>
   <div class="header-right">
     <span class="run-status" id="run-status"></span>
+    <label class="auto-run-inline">auto:<input type="number" id="auto-run-hours" min="0" step="1">h</label>
     <button class="run-btn" id="run-btn" data-action="startRun">
       Run
     </button>
@@ -88,21 +91,6 @@
                     data-action="saveDefaultModel">Save</button>
           </div>
         </div>
-        <div class="card section-card">
-          <div class="card-title section-head">Auto-run</div>
-          <p class="card-meta section-head">
-            When you open labrats, automatically run if the last run
-            was longer ago than this. Set to 0 to disable.</p>
-          <div class="form-group">
-            <label>Hours since last run</label>
-            <input type="number" id="auto-run-hours" min="0" step="1">
-          </div>
-          <div class="card-meta" id="last-run-at-meta"></div>
-          <div class="btn-row">
-            <button class="btn btn-primary"
-                    data-action="saveAutoRun">Save</button>
-          </div>
-        </div>
         <div class="card">
           <details id="api-keys-details">
             <summary class="api-keys-summary">API Keys</summary>
@@ -142,6 +130,8 @@
 <div class="toast" id="toast"></div>
 <datalist id="model-options"></datalist>
 
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

@@ -2,6 +2,8 @@
 
 import asyncio
 
+from loguru import logger
+
 from labrats.models import Paper, PaperCard, PersonaConfig
 from labrats.personas import run_persona, summarize_abstract
 
@@ -32,15 +34,29 @@ async def run_pipeline(
     api_base: str | None = None,
     on_progress=None,
     purpose: str = "",
+    on_card=None,
 ) -> list[PaperCard]:
-    """Evaluate papers sequentially. Calls on_progress(done, total) after each."""
+    """Evaluate papers sequentially.
+
+    Per-paper failures are logged and skipped — surviving papers are
+    still returned (and handed to ``on_card`` as they complete, so
+    callers can persist incrementally rather than at the end).
+    """
     cards = []
     total = len(papers)
     for i, paper in enumerate(papers, start=1):
-        card = await evaluate_paper(
-            paper, personas, persona_prompt, model, api_base, purpose,
-        )
-        cards.append(card)
+        try:
+            card = await evaluate_paper(
+                paper, personas, persona_prompt, model, api_base, purpose,
+            )
+        except Exception as e:
+            logger.exception(
+                f"paper failed, skipping: {paper.title[:72]} — {e}"
+            )
+        else:
+            cards.append(card)
+            if on_card:
+                on_card(card)
         if on_progress:
             on_progress(i, total)
     return cards
