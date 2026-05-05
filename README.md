@@ -10,8 +10,7 @@
 
 <p align="center">
   <a href="https://www.python.org/downloads/"><img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-blue.svg"></a>
-  
-  ![](./.github/vibecode.svg)
+  <a href="https://github.com/aryakaul/vibecode-badge/"><img alt="Vibe Coded percent" src=".github/vibecode.svg"></a> 
 </p>
 
 <p align="center">
