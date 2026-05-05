@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Generate badge
-        run: python vibecode.py
+        run: python ./.github/vibecode.py
       - name: Commit badge
         run: |
           git config user.name "github-actions[bot]"
