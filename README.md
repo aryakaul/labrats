@@ -21,10 +21,6 @@
   <a href="#configuration">Configuration</a>
 </p>
 
-<p align="center">
-  <em>👋 New to the command line? Start with the <a href="https://github.com/aryakaul/labrats/wiki/Getting-Started">step-by-step Getting Started guide</a> — it walks you through everything, no prior experience required.</em>
-</p>
-
 ---
 
 ## What is labrats?
