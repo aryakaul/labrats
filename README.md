@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="#what-is-labrats">About</a> •
-  <a href="#meet-the-labrats">The Labrats</a> •
+  <a href="#meet-you-labrats">Your Labrats</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#how-it-works">How It Works</a> •
   <a href="#configuration">Configuration</a>
