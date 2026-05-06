@@ -31,10 +31,9 @@
 
 You provide a list of filtering criteria - keywords, categories, your own research context. `labrats` then pulls all the new preprints and a team of LLM-powered "labrats" (each playing a distinct persona) reads each abstract, scores it, and writes their thoughts. You can peruse the results in a clean webpage, and then pick those papers that you want to spend time reading in-depth. 
 
+https://github.com/user-attachments/assets/8b192522-ad94-49d7-a382-b4825b3dd09f
 <p align="center">
-  <video src="https://raw.githubusercontent.com/aryakaul/labrats/refs/heads/main/assets/demo.mp4" controls width="780"></video>
-  <br>
-  <sub><em>The digest view. Each card shows the team's headline score, a disagreement flag, and one button per labrat.</em></sub>
+  <sub><em>A demo of what the UI looks like.</em></sub>
 </p>
 
 The code is open-source, it runs on your machine, and works with whatever LLM you want — OpenAI, Anthropic, Gemini, or locally installed models.
