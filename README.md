@@ -14,6 +14,7 @@
 </p>
 
 <p align="center">
+  <a href="https://aryakaul.github.io/labrats/">Live Demo</a> •
   <a href="#what-is-labrats">About</a> •
   <a href="#meet-your-labrats">Your Labrats</a> •
   <a href="#quick-start">Quick Start</a> •
@@ -37,6 +38,8 @@ https://github.com/user-attachments/assets/8b192522-ad94-49d7-a382-b4825b3dd09f
 </p>
 
 The code is open-source, it runs on your machine, and works with whatever LLM you want — OpenAI, Anthropic, Gemini, or locally installed models.
+
+> 🔴 **[Try the live demo](https://aryakaul.github.io/labrats/)** — rebuilt daily from fresh preprints by GitHub Actions, no install needed.
 
 > 📝 My [substack post](https://open.substack.com/pub/aryakaul/p/labrats?r=hiz29&utm_campaign=post&utm_medium=web&showWelcomeOnShare=true) has more details if you're interested.
 

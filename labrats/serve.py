@@ -161,6 +161,32 @@ def _card_to_dict(card, config_dir: Path):
     }
 
 
+def build_profile_cards(conn, config_dir: Path, profile: dict):
+    """Assemble scored PaperCards for a profile from the DB."""
+    pnames = profile.get("personas")
+    persona_list = [
+        p for p in load_personas(config_dir, pnames)
+        if p.enabled
+    ]
+    persona_names = [p.name for p in persona_list]
+
+    cards = []
+    for paper in load_papers(conn, profile["name"]):
+        res_map = load_results(conn, paper.doi, profile["name"])
+        results = [res_map[n] for n in persona_names if n in res_map]
+        if results:
+            llm_summary = load_llm_summary(conn, paper.doi)
+            cards.append(
+                PaperCard(
+                    paper=paper,
+                    results=results,
+                    llm_summary=llm_summary,
+                )
+            )
+
+    return score_cards(cards)
+
+
 def _mask_api_keys(keys: dict) -> dict:
     """Partially mask API key values for safe display."""
     masked = {}
@@ -376,29 +402,7 @@ class ServeHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "unknown profile"}, 404)
             return
 
-        pnames = profile.get("personas")
-        persona_list = [
-            p for p in load_personas(self.config_dir, pnames)
-            if p.enabled
-        ]
-        persona_names = [p.name for p in persona_list]
-
-        db_papers = load_papers(conn, profile_name)
-        cards = []
-        for paper in db_papers:
-            res_map = load_results(conn, paper.doi, profile_name)
-            results = [res_map[n] for n in persona_names if n in res_map]
-            if results:
-                llm_summary = load_llm_summary(conn, paper.doi)
-                cards.append(
-                    PaperCard(
-                        paper=paper,
-                        results=results,
-                        llm_summary=llm_summary,
-                    )
-                )
-
-        cards = score_cards(cards)
+        cards = build_profile_cards(conn, self.config_dir, profile)
         conn.close()
         self._send_json([_card_to_dict(c, self.config_dir) for c in cards])
 

@@ -15,6 +15,11 @@ const state = {
 	personaData: {},         // per-card persona detail keyed by 'pd-<cid>-<i>'
 };
 
+// Static-export mode: data baked in at export time, no server.
+const STATIC = !!window.__DIGEST__;
+const REPO_URL = 'https://github.com/aryakaul/labrats';
+const SUBSTACK_URL = 'https://open.substack.com/pub/aryakaul/p/labrats';
+
 let _cardId = 0;
 
 const BIORXIV_CATEGORIES = [
@@ -217,10 +222,13 @@ function renderDigestCards(profile, cards) {
 	_cardId = 0;
 	closePersonaPanel();
 	if (!cards || !cards.length) {
+		const hint = STATIC
+			? 'No papers matched this profile in the latest run.'
+			: 'Click Run to fetch and analyze papers.';
 		$('digest-content').innerHTML = `
 			<div class="empty-state">
 				<h2>No papers yet</h2>
-				<p>Click Run to fetch and analyze papers.</p>
+				<p>${hint}</p>
 			</div>`;
 		return;
 	}
@@ -322,11 +330,12 @@ function renderOneCard(card, profile) {
 			<div class="pp-header">
 				<div id="cpt-${cid}"></div>
 				<div class="pp-header-actions">
+					${STATIC ? '' : `
 					<button class="rerun-btn" id="rerun-${cid}"
 					        data-action="rerunPersona"
 					        data-cid="${cid}" data-doi="${esc(p.doi)}"
 					        data-profile="${esc(profile)}"
-					        title="Re-run this persona">↻</button>
+					        title="Re-run this persona">↻</button>`}
 					<button class="pp-close" data-action="closePersonaPanel" data-cid="${cid}">×</button>
 				</div>
 			</div>
@@ -1004,6 +1013,12 @@ actions.saveApiKeys = async () => {
 // Apply persisted dark mode before first paint.
 if (localStorage.getItem('darkMode')) document.body.classList.add('dark');
 
+actions.toggleDark = () => {
+	const on = !document.body.classList.contains('dark');
+	document.body.classList.toggle('dark', on);
+	localStorage.setItem('darkMode', on ? '1' : '');
+};
+
 actions.toggleDarkMode = (input) => {
 	document.body.classList.toggle('dark', input.checked);
 	localStorage.setItem('darkMode', input.checked ? '1' : '');
@@ -1012,7 +1027,49 @@ actions.toggleDarkMode = (input) => {
 
 /* ── init ── */
 
+// Demo-only header links, live badge, and digest meta line.
+function renderStaticChrome() {
+	document.querySelector('.header-right').innerHTML = `
+		<span class="demo-badge">live · rebuilt daily</span>
+		<a class="header-link" href="${REPO_URL}"
+		   target="_blank" rel="noopener">GitHub</a>
+		<a class="header-link" href="${SUBSTACK_URL}"
+		   target="_blank" rel="noopener">Substack</a>
+		<button class="dm-btn" data-action="toggleDark"
+		        title="Toggle dark mode">◐</button>`;
+	document.querySelector('.sidebar-bottom').style.display = 'none';
+
+	const ps = state.digestProfiles;
+	const papers = ps.reduce((n, p) => n + (p.paper_count || 0), 0);
+	const dates = ps.map(p => p.last_scraped).filter(Boolean);
+	const updated = dates.length ? dates.sort().at(-1) : '';
+	const meta = document.createElement('div');
+	meta.className = 'demo-meta';
+	meta.textContent =
+		`${papers} papers across ${ps.length} ` +
+		`profile${ps.length === 1 ? '' : 's'}` +
+		(updated ? ` · updated ${updated}` : '');
+	$('digest-view').insertBefore(meta, $('digest-content'));
+}
+
 async function init() {
+	if (STATIC) {
+		state.digestProfiles = window.__DIGEST__.profiles || [];
+		state.digestData = window.__DIGEST__.cards || {};
+		renderStaticChrome();
+		renderSidebar();
+		if (state.digestProfiles.length) {
+			showDigest(state.digestProfiles[0].name);
+		} else {
+			$('digest-content').innerHTML = `
+				<div class="empty-state">
+					<h2>No papers yet</h2>
+					<p>The latest run produced no digest.</p>
+				</div>`;
+		}
+		return;
+	}
+
 	const [personas, profiles, settings, models, digestProfiles] = await Promise.all([
 		api('GET', '/api/personas'),
 		api('GET', '/api/profiles'),

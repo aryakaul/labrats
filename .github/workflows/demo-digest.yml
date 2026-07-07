@@ -1,0 +1,53 @@
+name: demo digest
+
+on:
+  schedule:
+    - cron: "17 11 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.0.0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv run labrats init --config-dir ./demo-config
+      - run: >
+          uv run labrats run
+          --config-dir ./demo-config
+          --db-path ./demo.db
+          --model anthropic/claude-haiku-4-5
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - run: >
+          uv run labrats export
+          --config-dir ./demo-config
+          --db-path ./demo.db
+          --out-dir ./site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
