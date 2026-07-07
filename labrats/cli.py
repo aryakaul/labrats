@@ -474,6 +474,12 @@ def test(
         )
     )
     cards = score_cards(cards)
+    if not cards:
+        rprint(
+            "[red]No cards produced[/red] — every persona call failed "
+            "(e.g. the model rejected the input). See the log above."
+        )
+        raise typer.Exit(1)
     card = cards[0]
 
     for r in card.results:
