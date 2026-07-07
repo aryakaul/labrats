@@ -101,6 +101,58 @@ def save_profiles(config_dir: Path, profiles: list[dict]) -> None:
         )
 
 
+def add_profile(config_dir: Path, profile: dict) -> list[dict]:
+    """Append a profile and return the updated list."""
+    profiles = load_profiles(config_dir)
+    profiles.append(profile)
+    save_profiles(config_dir, profiles)
+    return profiles
+
+
+def update_profile(config_dir: Path, idx: int, profile: dict) -> list[dict]:
+    """Replace the profile at idx (no-op if out of range)."""
+    profiles = load_profiles(config_dir)
+    if 0 <= idx < len(profiles):
+        profiles[idx] = profile
+        save_profiles(config_dir, profiles)
+    return profiles
+
+
+def delete_profile(config_dir: Path, idx: int) -> list[dict]:
+    """Remove the profile at idx (no-op if out of range)."""
+    profiles = load_profiles(config_dir)
+    if 0 <= idx < len(profiles):
+        profiles.pop(idx)
+        save_profiles(config_dir, profiles)
+    return profiles
+
+
+def update_settings(config_dir: Path, patch: dict) -> dict:
+    """Merge an API settings patch into settings.yaml.
+
+    api_keys whose values are masked placeholders (contain '*') are
+    left unchanged; empty values clear the key. default_model and
+    auto_run_hours are applied when present.
+    """
+    current = load_settings(config_dir)
+    cur_keys = current.get("api_keys", {})
+    for k, v in patch.get("api_keys", {}).items():
+        if v and "*" not in v:
+            cur_keys[k] = v
+        elif not v:
+            cur_keys[k] = ""
+    current["api_keys"] = cur_keys
+    if "default_model" in patch:
+        current["default_model"] = patch["default_model"]
+    if "auto_run_hours" in patch:
+        try:
+            current["auto_run_hours"] = max(0, int(patch["auto_run_hours"]))
+        except (TypeError, ValueError):
+            current["auto_run_hours"] = 0
+    save_settings(config_dir, current)
+    return current
+
+
 # ── personas (personas/*.yaml) ──
 
 

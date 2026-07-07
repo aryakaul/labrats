@@ -25,14 +25,17 @@ from labrats.models_registry import (
     list_cloud_models,
 )
 from labrats.personas import (
+    add_profile,
     delete_persona,
+    delete_profile,
     load_personas,
     load_profiles,
     load_settings,
     resolve_model,
     save_persona,
-    save_profiles,
     save_settings,
+    update_profile,
+    update_settings,
 )
 from labrats.runner import run_all_profiles, rerun_paper
 
@@ -308,10 +311,7 @@ class ServeHandler(BaseHTTPRequestHandler):
             self._send_json(_list_personas_raw(self.config_dir))
 
         elif self.path == "/api/profiles":
-            data = self._read_body()
-            profiles = load_profiles(self.config_dir)
-            profiles.append(data)
-            save_profiles(self.config_dir, profiles)
+            profiles = add_profile(self.config_dir, self._read_body())
             self._send_json(profiles)
 
         elif self.path == "/api/run":
@@ -365,25 +365,7 @@ class ServeHandler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         if self.path == "/api/settings":
-            data = self._read_body()
-            new_keys = data.get("api_keys", {})
-            current = load_settings(self.config_dir)
-            cur_keys = current.get("api_keys", {})
-            # Only update keys that aren't masked placeholder values
-            for k, v in new_keys.items():
-                if v and "*" not in v:
-                    cur_keys[k] = v
-                elif not v:
-                    cur_keys[k] = ""
-            current["api_keys"] = cur_keys
-            if "default_model" in data:
-                current["default_model"] = data["default_model"]
-            if "auto_run_hours" in data:
-                try:
-                    current["auto_run_hours"] = max(0, int(data["auto_run_hours"]))
-                except (TypeError, ValueError):
-                    current["auto_run_hours"] = 0
-            save_settings(self.config_dir, current)
+            update_settings(self.config_dir, self._read_body())
             self._send_json({"ok": True})
             return
 
@@ -396,11 +378,9 @@ class ServeHandler(BaseHTTPRequestHandler):
 
         elif len(parts) == 4 and parts[1:3] == ["api", "profiles"]:
             idx = int(parts[3])
-            data = self._read_body()
-            profiles = load_profiles(self.config_dir)
-            if 0 <= idx < len(profiles):
-                profiles[idx] = data
-                save_profiles(self.config_dir, profiles)
+            profiles = update_profile(
+                self.config_dir, idx, self._read_body(),
+            )
             self._send_json(profiles)
 
         else:
@@ -417,10 +397,7 @@ class ServeHandler(BaseHTTPRequestHandler):
 
         elif len(parts) == 4 and parts[1:3] == ["api", "profiles"]:
             idx = int(parts[3])
-            profiles = load_profiles(self.config_dir)
-            if 0 <= idx < len(profiles):
-                profiles.pop(idx)
-                save_profiles(self.config_dir, profiles)
+            profiles = delete_profile(self.config_dir, idx)
             self._send_json(profiles)
 
         else:
