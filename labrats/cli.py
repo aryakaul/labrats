@@ -390,6 +390,25 @@ def run(
 
 
 @app.command()
+def export(
+    out_dir: Path = typer.Option(
+        Path("output/site"), "--out-dir",
+        help="Directory to write the static site into",
+    ),
+    config_dir: Path = typer.Option(None, help=_CFG_HELP),
+    db_path: Path = typer.Option(None, help=_DB_HELP),
+):
+    """Export the digest as a static site (no server)."""
+    from labrats.export import export_site
+
+    cfg = config_dir or _config_dir()
+    _require_config(cfg)
+    db = db_path or _db_path()
+    out = export_site(cfg, db, out_dir)
+    rprint(f"exported → {out}")
+
+
+@app.command()
 def test(
     model: str = typer.Option(None, help=_MDL_HELP),
     source: str = typer.Option("all", help=_SRC_HELP),
