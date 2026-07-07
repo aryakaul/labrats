@@ -288,20 +288,24 @@ header {
 	font-size: 0.78rem;
 	color: #999;
 }
-.sort-btn {
-	padding: 0.18rem 0.55rem;
+/* Shared outline "pill" toggle button (sort / abstract-tab / persona) */
+.pill-btn {
 	background: none;
 	border: 1px solid #ddd;
 	border-radius: 3px;
 	cursor: pointer;
-	font-size: 0.76rem;
-	color: #666;
 }
-.sort-btn:hover { border-color: #999; color: #333; }
-.sort-btn.active {
+.pill-btn:hover { border-color: #999; color: #333; }
+.pill-btn.active {
 	background: #1a1a1a;
 	color: #fff;
 	border-color: #1a1a1a;
+}
+
+.sort-btn {
+	padding: 0.18rem 0.55rem;
+	font-size: 0.76rem;
+	color: #666;
 }
 
 /* ── cards ── */
@@ -391,18 +395,8 @@ header {
 }
 .abstract-tab-btn {
 	padding: 0.12rem 0.5rem;
-	background: none;
-	border: 1px solid #ddd;
-	border-radius: 3px;
-	cursor: pointer;
 	font-size: 0.73rem;
 	color: #777;
-}
-.abstract-tab-btn:hover { border-color: #999; color: #333; }
-.abstract-tab-btn.active {
-	background: #1a1a1a;
-	color: #fff;
-	border-color: #1a1a1a;
 }
 .abstract {
 	font-size: 0.83rem;
@@ -435,18 +429,8 @@ header {
 }
 .persona-btn {
 	padding: 0.18rem 0.6rem;
-	background: none;
-	border: 1px solid #ddd;
-	border-radius: 3px;
-	cursor: pointer;
 	font-size: 0.75rem;
 	color: #555;
-}
-.persona-btn:hover { border-color: #888; color: #1a1a1a; }
-.persona-btn.active {
-	background: #1a1a1a;
-	color: #fff;
-	border-color: #1a1a1a;
 }
 
 
@@ -840,23 +824,9 @@ body.dark .rerun-btn { color: #444; }
 body.dark .rerun-btn:hover { color: #e8e8e8; }
 body.dark .pp-summary { color: #ccc; }
 body.dark .pp-scores { color: #666; border-color: #2a2a2a; }
-body.dark .sort-btn { border-color: #444; color: #888; }
-body.dark .sort-btn:hover { border-color: #888; color: #e8e8e8; }
-body.dark .sort-btn.active {
-	background: #e8e8e8;
-	color: #111;
-	border-color: #e8e8e8;
-}
-body.dark .persona-btn { border-color: #444; color: #888; }
-body.dark .persona-btn:hover { border-color: #888; color: #e8e8e8; }
-body.dark .persona-btn.active {
-	background: #e8e8e8;
-	color: #111;
-	border-color: #e8e8e8;
-}
-body.dark .abstract-tab-btn { border-color: #444; color: #888; }
-body.dark .abstract-tab-btn:hover { border-color: #888; color: #e8e8e8; }
-body.dark .abstract-tab-btn.active {
+body.dark .pill-btn { border-color: #444; color: #888; }
+body.dark .pill-btn:hover { border-color: #888; color: #e8e8e8; }
+body.dark .pill-btn.active {
 	background: #e8e8e8;
 	color: #111;
 	border-color: #e8e8e8;

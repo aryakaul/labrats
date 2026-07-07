@@ -228,10 +228,10 @@ function renderDigestCards(profile, cards) {
 	const controls = `
 		<div class="panel-controls">
 			Sort by
-			<button class="sort-btn active" data-action="sortDigest" data-key="score">
+			<button class="sort-btn pill-btn active" data-action="sortDigest" data-key="score">
 				score <span class="sort-arrow">▼</span>
 			</button>
-			<button class="sort-btn" data-action="sortDigest" data-key="date">
+			<button class="sort-btn pill-btn" data-action="sortDigest" data-key="date">
 				date <span class="sort-arrow" hidden>▼</span>
 			</button>
 		</div>`;
@@ -261,10 +261,10 @@ function renderAbstractSection(card, cid) {
 		.join('<br>');
 	return `
 		<div class="abstract-tabs">
-			<button class="abstract-tab-btn active"
+			<button class="abstract-tab-btn pill-btn active"
 			        data-action="switchAbstractTab"
 			        data-show="abs-${cid}" data-hide="sum-${cid}">Abstract</button>
-			<button class="abstract-tab-btn"
+			<button class="abstract-tab-btn pill-btn"
 			        data-action="switchAbstractTab"
 			        data-show="sum-${cid}" data-hide="abs-${cid}">LLM Summary</button>
 		</div>
@@ -311,7 +311,7 @@ function renderOneCard(card, profile) {
 			image_url: r.image_url || '',
 		};
 		return `
-			<button class="persona-btn" data-action="selectPersona"
+			<button class="persona-btn pill-btn" data-action="selectPersona"
 			        data-key="${key}" data-cid="${cid}"
 			        data-persona-name="${esc(r.persona_name)}">${esc(r.persona_name)}</button>`;
 	}).join('');
