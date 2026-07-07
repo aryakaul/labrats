@@ -163,14 +163,8 @@ def run_all_profiles(
             f" papers  ×  {len(personas)} personas  [{effective_model}]"
         )
 
-        def _make_progress_cb(papers_list):
-            def cb(done, total):
-                logger.info(f"    [{done}/{total}] {papers_list[done - 1].title[:72]}")
-                if on_progress:
-                    on_progress(done, total)
-            return cb
-
         def _persist(card, _pname=pname):
+            logger.info(f"    ✓ {card.paper.title[:72]}")
             upsert_results(conn, card.paper.doi, _pname, card.results)
             if card.llm_summary:
                 upsert_llm_summary(conn, card.paper.doi, card.llm_summary)
@@ -178,7 +172,8 @@ def run_all_profiles(
         asyncio.run(
             run_pipeline(
                 to_eval, personas, persona_prompt,
-                effective_model, api_base, _make_progress_cb(to_eval),
+                effective_model, api_base,
+                on_progress=on_progress,
                 purpose=purpose,
                 on_card=_persist,
             )
