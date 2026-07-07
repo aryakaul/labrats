@@ -1,6 +1,7 @@
 """Discover and list available LLM models (cloud via litellm, local via API)."""
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -9,28 +10,30 @@ try:
 except ImportError:
     litellm = None
 
-# Maps provider name -> env var name for API key
-PROVIDER_KEYS = {
-    "openai": "OPENAI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "gemini": "GOOGLE_API_KEY",
-    "google": "GOOGLE_API_KEY",
-    "groq": "GROQ_API_KEY",
-    "together_ai": "TOGETHERAI_API_KEY",
-    "mistral": "MISTRAL_API_KEY",
-    "cohere": "COHERE_API_KEY",
-}
+# Canonical, ordered provider registry — the single source of truth for
+# provider key, display label, API-key env var, and docs link. The
+# frontend consumes this via /api/models rather than re-declaring it.
+PROVIDERS = [
+    {"key": "openai", "label": "OpenAI", "env": "OPENAI_API_KEY",
+     "docs": "https://platform.openai.com/docs/models"},
+    {"key": "anthropic", "label": "Anthropic", "env": "ANTHROPIC_API_KEY",
+     "docs": "https://docs.anthropic.com/en/docs/about-claude/models"},
+    {"key": "gemini", "label": "Google / Gemini", "env": "GOOGLE_API_KEY",
+     "docs": "https://ai.google.dev/gemini-api/docs/models"},
+    {"key": "groq", "label": "Groq", "env": "GROQ_API_KEY",
+     "docs": "https://console.groq.com/docs/models"},
+    {"key": "mistral", "label": "Mistral", "env": "MISTRAL_API_KEY",
+     "docs": "https://docs.mistral.ai/getting-started/models/models_overview/"},
+    {"key": "cohere", "label": "Cohere", "env": "COHERE_API_KEY",
+     "docs": "https://docs.cohere.com/docs/models"},
+    {"key": "together_ai", "label": "Together AI",
+     "env": "TOGETHERAI_API_KEY",
+     "docs": "https://docs.together.ai/docs/chat-models"},
+]
 
-# Links to each provider's model documentation
-PROVIDER_DOCS = {
-    "openai": "https://platform.openai.com/docs/models",
-    "anthropic": "https://docs.anthropic.com/en/docs/about-claude/models",
-    "gemini": "https://ai.google.dev/gemini-api/docs/models",
-    "groq": "https://console.groq.com/docs/models",
-    "mistral": "https://docs.mistral.ai/getting-started/models/models_overview/",
-    "cohere": "https://docs.cohere.com/docs/models",
-    "together_ai": "https://docs.together.ai/docs/chat-models",
-}
+# Derived lookups (keep the old names/shapes callers already use).
+PROVIDER_KEYS = {p["key"]: p["env"] for p in PROVIDERS}
+PROVIDER_DOCS = {p["key"]: p["docs"] for p in PROVIDERS}
 
 # Filter out non-chat models (embeddings, TTS, image gen, etc.)
 _EXCLUDE = re.compile(
@@ -41,14 +44,17 @@ _EXCLUDE = re.compile(
 )
 
 # Canonical provider names we care about
-_PROVIDERS = {
-    "openai", "anthropic", "gemini", "groq",
-    "mistral", "cohere", "together_ai",
-}
+_PROVIDERS = {p["key"] for p in PROVIDERS}
+
+# litellm's registry is static per process — build the list once.
+_cloud_cache: dict[str, list[str]] | None = None
 
 
 def list_cloud_models() -> dict[str, list[str]]:
     """Return {provider: [model_name, ...]} from litellm's model registry."""
+    global _cloud_cache
+    if _cloud_cache is not None:
+        return _cloud_cache
     if litellm is None:
         return {}
 
@@ -72,6 +78,7 @@ def list_cloud_models() -> dict[str, list[str]]:
 
     for provider in result:
         result[provider].sort()
+    _cloud_cache = result
     return result
 
 
@@ -125,27 +132,30 @@ def discover_local(
 
     extra_endpoints are additional api_base URLs from settings.
     """
-    result: dict[str, list[str]] = {}
+    targets: list[tuple[str, str]] = []
     seen_bases: set[str] = set()
-
     for label, base in _KNOWN_LOCAL:
         seen_bases.add(base)
-        try:
-            models = list_local_models(base)
-            if models:
-                result[f"{label} ({base})"] = models
-        except Exception:
-            pass
-
+        targets.append((f"{label} ({base})", base))
     for base in extra_endpoints or []:
         if base in seen_bases:
             continue
         seen_bases.add(base)
+        targets.append((f"Local ({base})", base))
+
+    def _probe(target):
+        label, base = target
         try:
             models = list_local_models(base)
-            if models:
-                result[f"Local ({base})"] = models
+            return (label, models) if models else None
         except Exception:
-            pass
+            return None
 
+    # Probe endpoints concurrently — each blocks up to the request
+    # timeout, so serial probing stalls the single-threaded server.
+    result: dict[str, list[str]] = {}
+    with ThreadPoolExecutor(max_workers=max(len(targets), 1)) as pool:
+        for hit in pool.map(_probe, targets):
+            if hit:
+                result[hit[0]] = hit[1]
     return result

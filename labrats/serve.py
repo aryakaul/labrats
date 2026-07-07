@@ -22,7 +22,7 @@ from labrats.db import (
 )
 from labrats.models import PaperCard
 from labrats.models_registry import (
-    PROVIDER_DOCS,
+    PROVIDERS,
     discover_local,
     list_cloud_models,
 )
@@ -257,13 +257,18 @@ class ServeHandler(BaseHTTPRequestHandler):
 
     # ── response helpers ──
 
-    def _send_json(self, data, status=200):
-        body = json.dumps(data).encode()
+    def _send_bytes(self, body: bytes, content_type: str,
+                    status: int = 200, cache: bool = True):
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        if not cache:
+            self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_json(self, data, status=200):
+        self._send_bytes(json.dumps(data).encode(), "application/json", status)
 
     def _read_body(self):
         length = int(self.headers.get("Content-Length", 0))
@@ -271,11 +276,7 @@ class ServeHandler(BaseHTTPRequestHandler):
         return json.loads(raw) if raw else {}
 
     def _send_html(self, body: bytes):
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_bytes(body, "text/html; charset=utf-8")
 
     def _send_persona_image(self, filename: str):
         """Serve a persona image — user config wins over bundled."""
@@ -291,13 +292,7 @@ class ServeHandler(BaseHTTPRequestHandler):
         if not fpath:
             self.send_error(404)
             return
-        body = fpath.read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", "image/png")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-cache")
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_bytes(fpath.read_bytes(), "image/png", cache=False)
 
     def _send_static(self, rel_path: str):
         """Serve a file from labrats/static/ with no-cache headers."""
@@ -312,16 +307,10 @@ class ServeHandler(BaseHTTPRequestHandler):
         if not fpath.is_file():
             self.send_error(404)
             return
-        body = fpath.read_bytes()
         mime = _STATIC_MIME.get(
             fpath.suffix.lower(), "application/octet-stream",
         )
-        self.send_response(200)
-        self.send_header("Content-Type", mime)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-cache")
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_bytes(fpath.read_bytes(), mime, cache=False)
 
     # ── GET ──
 
@@ -348,16 +337,21 @@ class ServeHandler(BaseHTTPRequestHandler):
             api_keys = settings.get("api_keys", {})
             extra = settings.get("local_endpoints", [])
             cloud = list_cloud_models()
-            result = {"cloud": {}, "local": {}}
-            for provider, models in cloud.items():
-                has_key = bool(api_keys.get(provider, ""))
-                result["cloud"][provider] = {
-                    "models": models,
-                    "active": has_key,
-                    "docs": PROVIDER_DOCS.get(provider, ""),
+            providers = [
+                {
+                    "key": p["key"],
+                    "label": p["label"],
+                    "env": p["env"],
+                    "docs": p["docs"],
+                    "models": cloud.get(p["key"], []),
+                    "active": bool(api_keys.get(p["key"], "")),
                 }
-            result["local"] = discover_local(extra)
-            self._send_json(result)
+                for p in PROVIDERS
+            ]
+            self._send_json({
+                "providers": providers,
+                "local": discover_local(extra),
+            })
 
         elif path == "/api/digest":
             self._get_digest_profiles()

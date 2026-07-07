@@ -42,15 +42,8 @@ const ARXIV_CATEGORIES = [
 	'q-bio.TO', 'q-fin.ST', 'stat.AP', 'stat.ME', 'stat.ML',
 ];
 
-const PROVIDERS = [
-	{ key: 'openai',      label: 'OpenAI',          env: 'OPENAI_API_KEY' },
-	{ key: 'anthropic',   label: 'Anthropic',       env: 'ANTHROPIC_API_KEY' },
-	{ key: 'gemini',      label: 'Google / Gemini', env: 'GOOGLE_API_KEY' },
-	{ key: 'groq',        label: 'Groq',            env: 'GROQ_API_KEY' },
-	{ key: 'mistral',     label: 'Mistral',         env: 'MISTRAL_API_KEY' },
-	{ key: 'cohere',      label: 'Cohere',          env: 'COHERE_API_KEY' },
-	{ key: 'together_ai', label: 'Together AI',     env: 'TOGETHERAI_API_KEY' },
-];
+// Provider registry (key/label/env/docs/active/models) comes from
+// /api/models — Python's models_registry is the single source of truth.
 
 /* ── helpers ── */
 
@@ -106,9 +99,8 @@ document.addEventListener('blur', (ev) => {
 
 function activeModelOptions() {
 	const opts = [];
-	const cloud = state.models.cloud || {};
-	for (const provider of Object.keys(cloud)) {
-		if (cloud[provider].active) opts.push(...(cloud[provider].models || []));
+	for (const p of state.models.providers || []) {
+		if (p.active) opts.push(...(p.models || []));
 	}
 	const local = state.models.local || {};
 	for (const label of Object.keys(local)) {
@@ -894,9 +886,9 @@ function renderDefaultModel() {
 	</div>`;
 
 	const local = state.models.local || {};
-	const cloud = state.models.cloud || {};
+	const providers = state.models.providers || [];
 	const labels = Object.keys(local);
-	const activeCloud = Object.keys(cloud).filter(p => cloud[p].active);
+	const activeCloud = providers.filter(p => p.active);
 
 	if (labels.length || activeCloud.length) {
 		html += `<div class="model-list">
@@ -909,16 +901,15 @@ function renderDefaultModel() {
 					<div class="model-list-badges">${models.map(pickBadgeHTML).join('')}</div>
 				</div>`;
 		}
-		for (const provider of activeCloud) {
-			const info = cloud[provider];
-			const models = info.models || [];
-			const link = info.docs
-				? ` <a href="${esc(info.docs)}" target="_blank" class="model-list-link">[all models]</a>`
+		for (const p of activeCloud) {
+			const models = p.models || [];
+			const link = p.docs
+				? ` <a href="${esc(p.docs)}" target="_blank" class="model-list-link">[all models]</a>`
 				: '';
 			html += `
 				<details class="model-list-group">
 					<summary>
-						<span class="model-list-label">${esc(provider)}</span>
+						<span class="model-list-label">${esc(p.label)}</span>
 						<span class="model-list-count">(${models.length})</span>${link}
 					</summary>
 					<div class="model-list-badges">${models.map(pickBadgeHTML).join('')}</div>
@@ -946,18 +937,16 @@ function renderSettings() {
 			: 'No runs yet.';
 	}
 	const keys = state.settings.api_keys || {};
-	const cloud = state.models.cloud || {};
-	$('settings-fields').innerHTML = PROVIDERS.map(p => {
-		const info = cloud[p.key] || {};
-		const dot = `<span class="key-dot${info.active ? ' active' : ''}">●</span>`;
-		const docs = info.docs
-			? ` <a href="${esc(info.docs)}" target="_blank" class="key-docs">[models]</a>`
+	$('settings-fields').innerHTML = (state.models.providers || []).map(p => {
+		const dot = `<span class="key-dot${p.active ? ' active' : ''}">●</span>`;
+		const docs = p.docs
+			? ` <a href="${esc(p.docs)}" target="_blank" class="key-docs">[models]</a>`
 			: '';
 		return `
 			<div class="form-group">
 				<label>
 					${dot} ${esc(p.label)}${docs}
-					<span class="key-env">($${p.env})</span>
+					<span class="key-env">($${esc(p.env)})</span>
 				</label>
 				<div class="key-row">
 					<input type="password" class="sk-${p.key} key-input" value="${esc(keys[p.key] || '')}">
@@ -992,7 +981,7 @@ actions.saveAutoRun = async () => {
 
 actions.saveApiKeys = async () => {
 	const keys = {};
-	for (const p of PROVIDERS) {
+	for (const p of state.models.providers || []) {
 		const el = document.querySelector(`.sk-${p.key}`);
 		if (el) keys[p.key] = el.value.trim();
 	}
