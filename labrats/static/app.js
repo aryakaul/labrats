@@ -1013,16 +1013,15 @@ actions.saveApiKeys = async () => {
 // Apply persisted dark mode before first paint.
 if (localStorage.getItem('darkMode')) document.body.classList.add('dark');
 
-actions.toggleDark = () => {
-	const on = !document.body.classList.contains('dark');
+function setDark(on) {
 	document.body.classList.toggle('dark', on);
 	localStorage.setItem('darkMode', on ? '1' : '');
-};
+}
 
-actions.toggleDarkMode = (input) => {
-	document.body.classList.toggle('dark', input.checked);
-	localStorage.setItem('darkMode', input.checked ? '1' : '');
-};
+actions.toggleDark = () =>
+	setDark(!document.body.classList.contains('dark'));
+
+actions.toggleDarkMode = (input) => setDark(input.checked);
 
 
 /* ── init ── */

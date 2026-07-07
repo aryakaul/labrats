@@ -187,6 +187,18 @@ def build_profile_cards(conn, config_dir: Path, profile: dict):
     return score_cards(cards)
 
 
+def build_digest_profiles(conn, config_dir: Path):
+    """Profile list with paper counts and last scrape dates."""
+    return [
+        {
+            "name": p["name"],
+            "paper_count": paper_count(conn, p["name"]),
+            "last_scraped": last_scraped(conn, p["name"]),
+        }
+        for p in load_profiles(config_dir)
+    ]
+
+
 def _mask_api_keys(keys: dict) -> dict:
     """Partially mask API key values for safe display."""
     masked = {}
@@ -376,15 +388,7 @@ class ServeHandler(BaseHTTPRequestHandler):
         """Return profile list with paper counts and last scrape dates."""
         conn = open_db(self.db_path)
         conn.execute("PRAGMA journal_mode=WAL")
-        profiles = load_profiles(self.config_dir)
-        result = [
-            {
-                "name": p["name"],
-                "paper_count": paper_count(conn, p["name"]),
-                "last_scraped": last_scraped(conn, p["name"]),
-            }
-            for p in profiles
-        ]
+        result = build_digest_profiles(conn, self.config_dir)
         conn.close()
         self._send_json(result)
 

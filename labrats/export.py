@@ -1,22 +1,24 @@
 """Render the digest into a static site directory (no server)."""
 
 import json
+import re
 import shutil
 from pathlib import Path
 
-from labrats.db import last_scraped, open_db, paper_count
+from labrats.db import open_db
 from labrats.personas import load_profiles
 from labrats.serve import (
     INDEX_HTML,
     STATIC_DIR,
     _card_to_dict,
     _resolve_persona_image,
+    build_digest_profiles,
     build_profile_cards,
 )
 
 _IMG_PREFIX = "/persona-image/"
-_APP_JS_TAG = '<script src="app.js">'
-_FAVICON_SLUG = "excited_grad_student"
+_DATA_MARKER = "<!-- __DIGEST_DATA__ -->"
+_STATIC_REF = re.compile(r'/static/([^"\'#?\s]+)')
 
 
 def export_site(config_dir: Path, db_path: Path, out_dir: Path) -> Path:
@@ -24,22 +26,16 @@ def export_site(config_dir: Path, db_path: Path, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "personas").mkdir(exist_ok=True)
 
+    html = INDEX_HTML.read_text()
+    if _DATA_MARKER not in html:
+        raise RuntimeError(f"{INDEX_HTML} is missing {_DATA_MARKER}")
+
     conn = open_db(db_path)
-    conn.execute("PRAGMA journal_mode=WAL")
-    profiles = load_profiles(config_dir)
+    digest_profiles = build_digest_profiles(conn, config_dir)
 
-    digest_profiles = [
-        {
-            "name": p["name"],
-            "paper_count": paper_count(conn, p["name"]),
-            "last_scraped": last_scraped(conn, p["name"]),
-        }
-        for p in profiles
-    ]
-
-    slugs = {_FAVICON_SLUG}
+    slugs = set()
     cards_by_profile = {}
-    for profile in profiles:
+    for profile in load_profiles(config_dir):
         cards = build_profile_cards(conn, config_dir, profile)
         dicts = [_card_to_dict(c, config_dir) for c in cards]
         for card in dicts:
@@ -52,8 +48,14 @@ def export_site(config_dir: Path, db_path: Path, out_dir: Path) -> Path:
         cards_by_profile[profile["name"]] = dicts
     conn.close()
 
-    for asset in ("app.css", "app.js"):
-        shutil.copy2(STATIC_DIR / asset, out_dir / asset)
+    # Copy every /static/ asset the shell references, preserving paths.
+    for rel in set(_STATIC_REF.findall(html)):
+        src = STATIC_DIR / rel
+        if src.is_file():
+            dst = out_dir / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+    # Copy persona images referenced by the card data.
     for slug in slugs:
         src = _resolve_persona_image(slug, config_dir)
         if src:
@@ -62,9 +64,8 @@ def export_site(config_dir: Path, db_path: Path, out_dir: Path) -> Path:
     payload = json.dumps(
         {"profiles": digest_profiles, "cards": cards_by_profile}
     ).replace("</", "<\\/")
-    blob = f"<script>window.__DIGEST__ = {payload};</script>\n"
+    blob = f"<script>window.__DIGEST__ = {payload};</script>"
 
-    html = INDEX_HTML.read_text().replace("/static/", "")
-    html = html.replace(_APP_JS_TAG, blob + _APP_JS_TAG, 1)
+    html = html.replace("/static/", "").replace(_DATA_MARKER, blob, 1)
     (out_dir / "index.html").write_text(html)
     return out_dir
