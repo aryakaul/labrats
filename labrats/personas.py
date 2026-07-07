@@ -1,6 +1,7 @@
 """Load, save, and run LLM personas that evaluate papers."""
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -42,6 +43,24 @@ def load_settings(config_dir: Path) -> dict:
     with open(path) as f:
         data = yaml.safe_load(f) or {}
     return data
+
+
+def inject_api_keys(config_dir: Path) -> None:
+    """Load saved API keys into os.environ for litellm (env wins)."""
+    api_keys = load_settings(config_dir).get("api_keys", {})
+    for provider, env_var in PROVIDER_KEYS.items():
+        val = api_keys.get(provider, "")
+        if val and not os.environ.get(env_var):
+            os.environ[env_var] = val
+
+
+def profile_run_params(profile: dict, default_model: str):
+    """Return (effective_model, persona_prompt, purpose) for a profile."""
+    return (
+        profile.get("model") or default_model,
+        profile.get("persona_prompt") or DEFAULT_PERSONA_PROMPT,
+        profile.get("purpose", ""),
+    )
 
 
 def save_settings(config_dir: Path, data: dict) -> None:

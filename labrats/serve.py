@@ -387,7 +387,6 @@ class ServeHandler(BaseHTTPRequestHandler):
     def _get_digest_profiles(self):
         """Return profile list with paper counts and last scrape dates."""
         conn = open_db(self.db_path)
-        conn.execute("PRAGMA journal_mode=WAL")
         result = build_digest_profiles(conn, self.config_dir)
         conn.close()
         self._send_json(result)
@@ -395,7 +394,6 @@ class ServeHandler(BaseHTTPRequestHandler):
     def _get_digest_cards(self, profile_name):
         """Return scored paper cards for a profile."""
         conn = open_db(self.db_path)
-        conn.execute("PRAGMA journal_mode=WAL")
         profiles = load_profiles(self.config_dir)
         profile = next(
             (p for p in profiles if p["name"] == profile_name),

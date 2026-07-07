@@ -97,10 +97,7 @@ def list_local_models(api_base: str) -> list[str]:
 _local_model_cache: dict[str, str | None] = {}
 
 
-def resolve_local_model(
-    model: str,
-    extra_endpoints: list[str] | None = None,
-) -> str | None:
+def resolve_local_model(model: str) -> str | None:
     """Given a bare model name, find which local endpoint serves it.
 
     Returns the api_base URL, or None if not found locally.
@@ -109,10 +106,6 @@ def resolve_local_model(
         return _local_model_cache[model]
 
     all_bases = [base for _, base in _KNOWN_LOCAL]
-    for base in extra_endpoints or []:
-        if base not in all_bases:
-            all_bases.append(base)
-
     for base in all_bases:
         try:
             models = list_local_models(base)

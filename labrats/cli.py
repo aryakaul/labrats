@@ -4,11 +4,9 @@ import asyncio
 import os
 import shutil
 import sys
-from datetime import date, timedelta
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
-import requests
 import typer
 from loguru import logger
 from rich import print as rprint
@@ -22,15 +20,16 @@ from labrats.models_registry import (
     list_local_models,
 )
 from labrats.personas import (
-    DEFAULT_PERSONA_PROMPT,
     load_personas,
     load_profiles,
     load_settings,
+    profile_run_params,
     resolve_model,
 )
 from labrats.pipeline import run_pipeline
 from labrats.runner import run_all_profiles
 from labrats.scraper import (
+    default_date_range,
     fetch_from_sources,
     fetch_paper_by_doi,
     filter_by_topics,
@@ -39,6 +38,16 @@ from labrats.scraper import (
 from labrats.synthesis import score_cards
 
 app = typer.Typer()
+
+
+def _all_enabled_personas(cfg: Path, profiles: list[dict]) -> list:
+    """Every enabled persona across all profiles (preflight input)."""
+    personas = []
+    for p in profiles:
+        personas += [
+            x for x in load_personas(cfg, p.get("personas")) if x.enabled
+        ]
+    return personas
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -147,9 +156,7 @@ def _preflight_check(
     if api_base:
         # Local endpoint — verify the model is loaded
         try:
-            resp = requests.get(f"{api_base}/models", timeout=5)
-            resp.raise_for_status()
-            available = {m["id"] for m in resp.json().get("data", [])}
+            available = set(list_local_models(api_base))
         except Exception as e:
             rprint(f"[red]Cannot reach {api_base}/models[/red]\n  {e}")
             raise typer.Exit(1)
@@ -339,9 +346,7 @@ def preview(
     model = resolve_model(model, cfg)
     profiles = load_profiles(cfg)
     fetch_topics = {"arxiv_categories": union_arxiv_cats(profiles)}
-    today = date.today()
-    start = str(today - timedelta(days=1))
-    end = str(today)
+    start, end = default_date_range()
 
     papers = _fetch_and_warn(start, end, source, fetch_topics)
     rprint(f"Papers fetched: {len(papers)}\n")
@@ -376,10 +381,7 @@ def run(
     db = db_path or _db_path()
 
     profiles = load_profiles(cfg)
-    all_personas = []
-    for p in profiles:
-        pnames = p.get("personas")
-        all_personas += [x for x in load_personas(cfg, pnames) if x.enabled]
+    all_personas = _all_enabled_personas(cfg, profiles)
     _preflight_check(mdl, all_personas, api_base, cfg, profiles)
 
     try:
@@ -426,10 +428,7 @@ def test(
     profiles = load_profiles(cfg)
 
     # Preflight: verify model access before any network call
-    all_personas = []
-    for p in profiles:
-        pnames = p.get("personas")
-        all_personas += [x for x in load_personas(cfg, pnames) if x.enabled]
+    all_personas = _all_enabled_personas(cfg, profiles)
     _preflight_check(model, all_personas, api_base, cfg, profiles)
 
     if paper_doi:
@@ -441,9 +440,7 @@ def test(
         matched_profile = profiles[0]
     else:
         fetch_topics = {"arxiv_categories": union_arxiv_cats(profiles)}
-        today = date.today()
-        start = str(today - timedelta(days=1))
-        end = str(today)
+        start, end = default_date_range()
 
         papers = _fetch_and_warn(start, end, source, fetch_topics)
 
@@ -462,11 +459,9 @@ def test(
     pname = matched_profile["name"]
     pnames = matched_profile.get("personas")
     personas = [p for p in load_personas(cfg, pnames) if p.enabled]
-    effective_model = matched_profile.get("model") or model
-    persona_prompt = (
-        matched_profile.get("persona_prompt") or DEFAULT_PERSONA_PROMPT
+    effective_model, persona_prompt, purpose = profile_run_params(
+        matched_profile, model
     )
-    purpose = matched_profile.get("purpose", "")
 
     rprint(
         f"[bold]Profile:[/bold] {pname}\n"

@@ -1,10 +1,17 @@
 """Fetch preprints from biorxiv and arxiv, with topic filtering."""
 
 import xml.etree.ElementTree as ET
+from datetime import date, timedelta
 
 import requests
 
 from labrats.models import Paper
+
+
+def default_date_range() -> tuple[str, str]:
+    """Default scrape window: yesterday → today, as ISO strings."""
+    today = date.today()
+    return str(today - timedelta(days=1)), str(today)
 
 BIORXIV_API = "https://api.biorxiv.org/details/biorxiv"
 ARXIV_API = "https://export.arxiv.org/api/query"

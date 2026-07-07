@@ -1,7 +1,6 @@
 """Shared pipeline orchestration — fetch, evaluate, persist."""
 
 import asyncio
-import os
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -21,12 +20,11 @@ from labrats.db import (
     upsert_papers,
     upsert_results,
 )
-from labrats.models_registry import PROVIDER_KEYS
 from labrats.personas import (
-    DEFAULT_PERSONA_PROMPT,
+    inject_api_keys,
     load_personas,
     load_profiles,
-    load_settings,
+    profile_run_params,
 )
 from labrats.pipeline import run_pipeline
 from labrats.scraper import (
@@ -62,12 +60,7 @@ def run_all_profiles(
         if on_profile:
             on_profile(n)
 
-    # Inject saved API keys into environment for litellm
-    api_keys = load_settings(config_dir).get("api_keys", {})
-    for provider, env_var in PROVIDER_KEYS.items():
-        val = api_keys.get(provider, "")
-        if val and not os.environ.get(env_var):
-            os.environ[env_var] = val
+    inject_api_keys(config_dir)
 
     today_dt = date.today()
     today = str(today_dt)
@@ -77,7 +70,6 @@ def run_all_profiles(
 
     profiles = load_profiles(config_dir)
     conn = open_db(db_path)
-    conn.execute("PRAGMA journal_mode=WAL")
 
     _phase("scraping")
     needs_scrape = [
@@ -156,9 +148,9 @@ def run_all_profiles(
             continue
 
         persona_names = [p.name for p in personas]
-        effective_model = profile.get("model") or model
-        persona_prompt = profile.get("persona_prompt") or DEFAULT_PERSONA_PROMPT
-        purpose = profile.get("purpose", "")
+        effective_model, persona_prompt, purpose = profile_run_params(
+            profile, model
+        )
         to_eval = papers_needing_eval(conn, db_papers, pname, persona_names)
         if not to_eval:
             logger.info(
@@ -210,14 +202,9 @@ def rerun_paper(
     persona_name: str,
 ) -> None:
     """Re-evaluate a single paper with one persona, replacing its result."""
-    api_keys = load_settings(config_dir).get("api_keys", {})
-    for provider, env_var in PROVIDER_KEYS.items():
-        val = api_keys.get(provider, "")
-        if val and not os.environ.get(env_var):
-            os.environ[env_var] = val
+    inject_api_keys(config_dir)
 
     conn = open_db(db_path)
-    conn.execute("PRAGMA journal_mode=WAL")
 
     papers = load_papers(conn, profile_name)
     paper = next((p for p in papers if p.doi == doi), None)
@@ -240,9 +227,9 @@ def rerun_paper(
         conn.close()
         raise ValueError(f"persona {persona_name!r} not found or not enabled")
 
-    effective_model = profile.get("model") or model
-    persona_prompt = profile.get("persona_prompt") or DEFAULT_PERSONA_PROMPT
-    purpose = profile.get("purpose", "")
+    effective_model, persona_prompt, purpose = profile_run_params(
+        profile, model
+    )
 
     logger.info(f"rerun: {persona_name} on {paper.title[:60]}  [{effective_model}]")
     delete_persona_result(conn, doi, profile_name, persona_name)

@@ -49,6 +49,7 @@ def open_db(db_path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.executescript(_SCHEMA)
     conn.commit()
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
