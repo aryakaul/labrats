@@ -208,25 +208,43 @@ def upsert_results(
     conn.commit()
 
 
-def load_results(
+def load_results_for_profile(
     conn: sqlite3.Connection,
-    doi: str,
     profile: str,
-) -> dict[str, PersonaResult]:
-    """Load all persona results for a paper, keyed by persona name."""
+) -> dict[str, dict[str, PersonaResult]]:
+    """All persona results for a profile, grouped by DOI then persona.
+
+    One query instead of one-per-paper — used when building a whole
+    profile's digest.
+    """
     rows = conn.execute(
-        "SELECT * FROM results WHERE doi = ? AND profile = ?",
-        (doi, profile),
+        "SELECT * FROM results WHERE profile = ?", (profile,),
     ).fetchall()
-    return {
-        r["persona_name"]: PersonaResult(
+    out: dict[str, dict[str, PersonaResult]] = {}
+    for r in rows:
+        out.setdefault(r["doi"], {})[r["persona_name"]] = PersonaResult(
             persona_name=r["persona_name"],
             scores=json.loads(r["scores"]),
             summary=r["summary"],
             model=r["model"] or "",
         )
-        for r in rows
-    }
+    return out
+
+
+def load_summaries(
+    conn: sqlite3.Connection,
+    dois: list[str],
+) -> dict[str, str]:
+    """LLM-structured summaries for the given DOIs, keyed by DOI."""
+    dois = list(dois)
+    if not dois:
+        return {}
+    marks = ",".join("?" * len(dois))
+    rows = conn.execute(
+        f"SELECT doi, llm_summary FROM summaries WHERE doi IN ({marks})",
+        dois,
+    ).fetchall()
+    return {r["doi"]: r["llm_summary"] for r in rows}
 
 
 def load_llm_summary(conn: sqlite3.Connection, doi: str) -> str:

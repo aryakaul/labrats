@@ -9,9 +9,9 @@ from pathlib import Path
 from labrats.assets import persona_image_url
 from labrats.db import (
     last_scraped,
-    load_llm_summary,
     load_papers,
-    load_results,
+    load_results_for_profile,
+    load_summaries,
     paper_count,
 )
 from labrats.models import PaperCard
@@ -55,23 +55,24 @@ def card_to_dict(card, config_dir: Path):
 def build_profile_cards(conn, config_dir: Path, profile: dict):
     """Assemble scored PaperCards for a profile from the DB."""
     pnames = profile.get("personas")
-    persona_list = [
-        p for p in load_personas(config_dir, pnames)
-        if p.enabled
+    persona_names = [
+        p.name for p in load_personas(config_dir, pnames) if p.enabled
     ]
-    persona_names = [p.name for p in persona_list]
+
+    papers = load_papers(conn, profile["name"])
+    results_by_doi = load_results_for_profile(conn, profile["name"])
+    summaries = load_summaries(conn, [p.doi for p in papers])
 
     cards = []
-    for paper in load_papers(conn, profile["name"]):
-        res_map = load_results(conn, paper.doi, profile["name"])
+    for paper in papers:
+        res_map = results_by_doi.get(paper.doi, {})
         results = [res_map[n] for n in persona_names if n in res_map]
         if results:
-            llm_summary = load_llm_summary(conn, paper.doi)
             cards.append(
                 PaperCard(
                     paper=paper,
                     results=results,
-                    llm_summary=llm_summary,
+                    llm_summary=summaries.get(paper.doi, ""),
                 )
             )
 
