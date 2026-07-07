@@ -5,16 +5,14 @@ import re
 import shutil
 from pathlib import Path
 
+from labrats.assets import INDEX_HTML, STATIC_DIR, resolve_persona_image
 from labrats.db import open_db
-from labrats.personas import load_profiles
-from labrats.serve import (
-    INDEX_HTML,
-    STATIC_DIR,
-    _card_to_dict,
-    _resolve_persona_image,
+from labrats.digest import (
     build_digest_profiles,
     build_profile_cards,
+    card_to_dict,
 )
+from labrats.personas import load_profiles
 
 _IMG_PREFIX = "/persona-image/"
 _DATA_MARKER = "<!-- __DIGEST_DATA__ -->"
@@ -37,7 +35,7 @@ def export_site(config_dir: Path, db_path: Path, out_dir: Path) -> Path:
     cards_by_profile = {}
     for profile in load_profiles(config_dir):
         cards = build_profile_cards(conn, config_dir, profile)
-        dicts = [_card_to_dict(c, config_dir) for c in cards]
+        dicts = [card_to_dict(c, config_dir) for c in cards]
         for card in dicts:
             for result in card["results"]:
                 url = result["image_url"]
@@ -57,7 +55,7 @@ def export_site(config_dir: Path, db_path: Path, out_dir: Path) -> Path:
             shutil.copy2(src, dst)
     # Copy persona images referenced by the card data.
     for slug in slugs:
-        src = _resolve_persona_image(slug, config_dir)
+        src = resolve_persona_image(slug, config_dir)
         if src:
             shutil.copy2(src, out_dir / "personas" / f"{slug}.png")
 

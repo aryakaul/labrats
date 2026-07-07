@@ -12,22 +12,19 @@ from urllib.parse import unquote
 
 from loguru import logger
 
-from labrats.db import (
-    last_scraped,
-    load_llm_summary,
-    load_papers,
-    load_results,
-    open_db,
-    paper_count,
+from labrats.assets import INDEX_HTML, STATIC_DIR, resolve_persona_image
+from labrats.db import open_db
+from labrats.digest import (
+    build_digest_profiles,
+    build_profile_cards,
+    card_to_dict,
 )
-from labrats.models import PaperCard
 from labrats.models_registry import (
     PROVIDERS,
     discover_local,
     list_cloud_models,
 )
 from labrats.personas import (
-    _slugify,
     delete_persona,
     load_personas,
     load_profiles,
@@ -38,11 +35,6 @@ from labrats.personas import (
     save_settings,
 )
 from labrats.runner import run_all_profiles, rerun_paper
-from labrats.synthesis import parse_llm_summary, score_cards
-
-PACKAGE_DIR = Path(__file__).resolve().parent
-INDEX_HTML = PACKAGE_DIR / "templates" / "serve.html"
-STATIC_DIR = PACKAGE_DIR / "static"
 
 _STATIC_MIME = {
     ".css": "text/css; charset=utf-8",
@@ -101,101 +93,6 @@ def _list_personas_raw(config_dir):
             "enabled": p.enabled,
         }
         for p in load_personas(config_dir)
-    ]
-
-
-def _resolve_persona_image(slug: str, config_dir: Path) -> Path | None:
-    """Find a persona image file, preferring the user's config dir.
-
-    Looks for ``<config_dir>/personas/<slug>.png`` first (so users can
-    drop in art for custom personas — or override bundled images),
-    then falls back to the bundled ``labrats/static/personas/<slug>.png``.
-    """
-    user = config_dir / "personas" / f"{slug}.png"
-    if user.is_file():
-        return user
-    bundled = STATIC_DIR / "personas" / f"{slug}.png"
-    if bundled.is_file():
-        return bundled
-    return None
-
-
-def _persona_image_url(persona_name: str, config_dir: Path) -> str:
-    """Return the URL for a persona image, or '' if none exists."""
-    slug = _slugify(persona_name)
-    if _resolve_persona_image(slug, config_dir):
-        return f"/persona-image/{slug}.png"
-    return ""
-
-
-def _card_to_dict(card, config_dir: Path):
-    """Serialize a PaperCard to a JSON-safe dict for the digest API."""
-    p = card.paper
-    return {
-        "paper": {
-            "doi": p.doi,
-            "title": p.title,
-            "authors": p.authors,
-            "abstract": p.abstract,
-            "category": p.category,
-            "date": p.date,
-            "url": p.url,
-        },
-        "results": [
-            {
-                "persona_name": r.persona_name,
-                "scores": r.scores,
-                "summary": r.summary,
-                "model": r.model,
-                "image_url": _persona_image_url(
-                    r.persona_name, config_dir,
-                ),
-            }
-            for r in card.results
-        ],
-        "tension": card.tension,
-        "avg_score": card.avg_score,
-        "disputed": card.disputed,
-        "disputed_field": card.disputed_field,
-        "llm_summary": parse_llm_summary(card.llm_summary),
-    }
-
-
-def build_profile_cards(conn, config_dir: Path, profile: dict):
-    """Assemble scored PaperCards for a profile from the DB."""
-    pnames = profile.get("personas")
-    persona_list = [
-        p for p in load_personas(config_dir, pnames)
-        if p.enabled
-    ]
-    persona_names = [p.name for p in persona_list]
-
-    cards = []
-    for paper in load_papers(conn, profile["name"]):
-        res_map = load_results(conn, paper.doi, profile["name"])
-        results = [res_map[n] for n in persona_names if n in res_map]
-        if results:
-            llm_summary = load_llm_summary(conn, paper.doi)
-            cards.append(
-                PaperCard(
-                    paper=paper,
-                    results=results,
-                    llm_summary=llm_summary,
-                )
-            )
-
-    return score_cards(cards)
-
-
-def build_digest_profiles(conn, config_dir: Path):
-    """Profile list with paper counts and last scrape dates."""
-    return [
-        {
-            "name": p["name"],
-            "paper_count": paper_count(conn, p["name"]),
-            "last_scraped": last_scraped(conn, p["name"]),
-        }
-        for p in load_profiles(config_dir)
     ]
 
 
@@ -288,7 +185,7 @@ class ServeHandler(BaseHTTPRequestHandler):
         if not re.fullmatch(r"[a-z0-9_]+", slug):
             self.send_error(404)
             return
-        fpath = _resolve_persona_image(slug, self.config_dir)
+        fpath = resolve_persona_image(slug, self.config_dir)
         if not fpath:
             self.send_error(404)
             return
@@ -400,7 +297,7 @@ class ServeHandler(BaseHTTPRequestHandler):
 
         cards = build_profile_cards(conn, self.config_dir, profile)
         conn.close()
-        self._send_json([_card_to_dict(c, self.config_dir) for c in cards])
+        self._send_json([card_to_dict(c, self.config_dir) for c in cards])
 
     # ── POST ──
 
